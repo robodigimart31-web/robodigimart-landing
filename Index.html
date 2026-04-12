@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robo Digimart - Solusi Website Cepat</title>
+    <!-- Tailwind CSS untuk Styling Cepat dan Responsif -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Poppins -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        // Konfigurasi Tailwind untuk tema Dark Colorful Profesional
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Poppins', 'sans-serif'] },
+                    colors: { dark: '#0f172a', primary: '#3b82f6', secondary: '#8b5cf6', accent: '#f59e0b' }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Animasi Fly-in */
+        .fly-in { opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+        .fly-in.visible { opacity: 1; transform: translateY(0); }
+        /* Smooth Scroll */
+        html { scroll-behavior: smooth; }
+        /* Styling Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-dark text-slate-300 font-sans antialiased overflow-x-hidden relative">
+
+    <!-- Area Landing Page (Public) -->
+    <div id="public-view">
+        <!-- Navbar -->
+        <nav class="fixed w-full z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
+            <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+                <div class="flex items-center gap-2 text-white font-bold text-2xl">
+                    <!-- Logo SVG Baru: Robot Minimalis -->
+                    <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                        <circle cx="12" cy="5" r="2"></circle>
+                        <path d="M12 7v4"></path>
+                        <line x1="8" y1="16" x2="8.01" y2="16" stroke-width="3"></line>
+                        <line x1="16" y1="16" x2="16.01" y2="16" stroke-width="3"></line>
+                    </svg>
+                    <span class="mt-1">Robo<span class="text-transparent bg-clip-text bg-gradient-to-r from-secondary to-pink-500">Digimart</span></span>
+                </div>
+                <div class="hidden md:flex space-x-6 text-sm font-semibold">
+                    <a href="#tentang" class="hover:text-primary transition">Apa itu GAS?</a>
+                    <a href="#layanan" class="hover:text-primary transition">Layanan</a>
+                    <a href="#harga" class="hover:text-primary transition">Harga</a>
+                    <a href="#kontak" class="hover:text-primary transition">Kontak</a>
+                </div>
+                <a href="https://lynk.id/robodigital/9r1dq2qzmzzn" target="_blank" class="bg-gradient-to-r from-primary to-secondary text-white px-5 py-2 rounded-full font-semibold shadow-lg hover:shadow-primary/50 transition">Join VIP</a>
+            </div>
+        </nav>
+
+        <!-- 1. Hero Section -->
+        <section id="hero-section" class="relative pt-32 pb-20 px-6 min-h-screen flex items-center bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-900 via-dark to-dark overflow-hidden">
+            <!-- Abstract Particle Canvas -->
+            <canvas id="abstract-canvas" class="absolute inset-0 pointer-events-none opacity-60"></canvas>
+            
+            <div class="container mx-auto text-center max-w-4xl fly-in relative z-10">
+                <h1 class="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
+                    <span class="block mb-2">Buat Website Sendiri</span>
+                    <span class="block mb-4">
+                        <span class="text-transparent bg-clip-text bg-gradient-to-r from-secondary to-pink-500">Tanpa <span id="typewriter-text">Jago Coding</span></span><span class="text-pink-500 font-thin animate-pulse ml-1">|</span>
+                    </span>
+                    <span class="block text-3xl md:text-4xl mt-2 text-slate-300"> atau Kami Bisa Buatkan untuk Anda!</span>
+                </h1>
+                <p class="text-lg md:text-xl text-slate-400 mb-10">Mulai online hari ini. Cepat, murah, dan aman menggunakan infrastruktur Google Apps Script. Tanpa perlu bayar biaya hosting bulanan!</p>
+                <div class="flex flex-col sm:flex-row justify-center gap-4">
+                    <a href="https://lynk.id/robodigital/9r1dq2qzmzzn" target="_blank" class="bg-primary hover:bg-blue-600 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg shadow-primary/30 transition">Deploy Sekarang</a>
+                    <a href="#harga" class="bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 px-8 py-4 rounded-xl font-bold text-lg transition">Lihat Paket Jasa</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Edukasi: Apa itu GAS -->
+        <section id="tentang" class="py-20 px-6 bg-gradient-to-b from-dark to-slate-900">
+            <div class="container mx-auto max-w-5xl text-center fly-in">
+                <h2 class="text-3xl font-bold text-white mb-6">Apa itu Google Apps Script? 🤔</h2>
+                <p class="text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto">
+                    Google Apps Script (GAS) adalah platform luar biasa dari Google yang memungkinkan kita membuat aplikasi web ringan dan mengotomatiskan tugas. Sangat cocok bagi Anda yang butuh website sederhana, cepat jadi, dan **gratis hosting selamanya**. Datanya pun langsung masuk ke Google Sheets Anda!
+                </p>
+            </div>
+        </section>
+
+        <!-- 3. Keunggulan -->
+        <section class="py-20 px-6 bg-gradient-to-b from-slate-900 via-indigo-950/30 to-dark">
+            <div class="container mx-auto max-w-6xl fly-in">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <!-- Card 1 -->
+                    <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 hover:border-primary/50 transition">
+                        <svg class="w-12 h-12 text-accent mb-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                        <h3 class="text-xl font-bold text-white mb-3">Tanpa Biaya Hosting</h3>
+                        <p class="text-slate-400 text-sm">Berjalan di atas server Google secara gratis. Hemat jutaan rupiah per tahun untuk biaya sewa server.</p>
+                    </div>
+                    <!-- Card 2 -->
+                    <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 hover:border-primary/50 transition">
+                        <svg class="w-12 h-12 text-primary mb-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        <h3 class="text-xl font-bold text-white mb-3">Cepat & Ringan</h3>
+                        <p class="text-slate-400 text-sm">Tidak memerlukan instalasi database rumit. Arsitektur ringan yang langsung merespon interaksi pengguna.</p>
+                    </div>
+                    <!-- Card 3 -->
+                    <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 hover:border-primary/50 transition">
+                        <svg class="w-12 h-12 text-secondary mb-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        <h3 class="text-xl font-bold text-white mb-3">Aman & Terintegrasi</h3>
+                        <p class="text-slate-400 text-sm">Dilindungi keamanan standar Google. Terhubung otomatis dengan Google Sheets, Forms, dan Drive Anda.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. Produk Utama (DIY) -->
+        <section id="layanan" class="py-24 px-6 relative overflow-hidden bg-gradient-to-b from-dark via-purple-900/20 to-slate-900">
+            <canvas class="abstract-canvas absolute inset-0 pointer-events-none opacity-40"></canvas>
+            
+            <div class="absolute inset-0 bg-gradient-to-b from-transparent via-primary/10 to-transparent"></div>
+            <div class="container mx-auto max-w-4xl text-center relative z-10 fly-in">
+                <h2 class="text-3xl md:text-5xl font-bold text-white mb-6">Wujudkan Webiste Aplikasimu!</h2>
+                <p class="text-lg text-slate-400 mb-10">Ingin belajar dan membuat semuanya sendiri? Bergabunglah dengan Group VIP kami untuk akses Fasilitas dan Tools eksklusif.</p>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 text-center mb-10 pt-10">
+                    <div class="h-full bg-gradient-to-br from-primary/20 to-slate-800/80 border border-primary/30 p-4 rounded-xl text-white font-medium shadow-lg hover:border-primary hover:shadow-primary/20 transition flex items-center justify-center">
+                        <p class="leading-relaxed"><span class="text-green-500 font-bold mr-2">✓</span>Join Group VIP</p>
+                    </div>
+                    <div class="relative h-full bg-gradient-to-br from-secondary/20 to-slate-800/80 border border-secondary/30 p-4 rounded-xl text-white font-medium shadow-lg hover:border-secondary hover:shadow-secondary/20 transition flex items-center justify-center">
+                        <div class="absolute -top-7 left-1/2 transform -translate-x-1/2 animate-bounce flex flex-col items-center z-20">
+                            <div class="bg-[#e60000] text-white text-[11px] font-bold px-3 py-1 rounded-md shadow-lg whitespace-nowrap tracking-wide">
+                                PROMO TERBATAS
+                            </div>
+                            <div class="w-3 h-3 bg-[#e60000] transform rotate-45 -mt-1.5"></div>
+                        </div>
+                        <p class="leading-relaxed"><span class="text-green-500 font-bold mr-2">✓</span>Gemini Pro 1 Bulan (sharing)</p>
+                    </div>
+                    <div class="h-full bg-gradient-to-br from-indigo-500/20 to-slate-800/80 border border-indigo-500/30 p-4 rounded-xl text-white font-medium shadow-lg hover:border-indigo-500 hover:shadow-indigo-500/20 transition flex items-center justify-center">
+                        <p class="leading-relaxed"><span class="text-green-500 font-bold mr-2">✓</span>Akses Custom Tool</p>
+                    </div>
+                    <div class="h-full bg-gradient-to-br from-secondary/20 to-slate-800/80 border border-secondary/30 p-4 rounded-xl text-white font-medium shadow-lg hover:border-secondary hover:shadow-secondary/20 transition flex items-center justify-center">
+                        <p class="leading-relaxed"><span class="text-green-500 font-bold mr-2">✓</span>Gratis Template Keren</p>
+                    </div>
+                    <div class="h-full bg-gradient-to-br from-secondary/20 to-slate-800/80 border border-secondary/30 p-4 rounded-xl text-white font-medium shadow-lg hover:border-secondary hover:shadow-secondary/20 transition flex items-center justify-center">
+                        <p class="leading-relaxed"><span class="text-green-500 font-bold mr-2">✓</span>Tutorial & E-Learning</p>
+                    </div>
+                    <div class="h-full bg-gradient-to-br from-secondary/20 to-slate-800/80 border border-secondary/30 p-4 rounded-xl text-white font-medium shadow-lg hover:border-secondary hover:shadow-secondary/20 transition flex items-center justify-center">
+                        <p class="leading-relaxed"><span class="text-green-500 font-bold mr-2">✓</span>Diskusi Sepuasnya</p>
+                    </div>
+                </div>
+                <a href="https://lynk.id/robodigital/9r1dq2qzmzzn" target="_blank" class="inline-block bg-gradient-to-r from-primary to-secondary text-white px-10 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition transform">Dapatkan Akses VIP Sekarang</a>
+            </div>
+        </section>
+
+        <!-- 6 & 7. Jasa DFY & Pricing -->
+        <section id="harga" class="py-20 px-6 bg-gradient-to-b from-slate-900 via-dark to-dark">
+            <div class="container mx-auto max-w-6xl fly-in">
+                <div class="text-center mb-16">
+                    <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Tidak Mau Ribet? Kami Buatkan!</h2>
+                    <p class="text-slate-400">Pilih paket jasa pembuatan website applikasi profesional berbasis GAS kami.</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="bg-slate-800 rounded-2xl p-8 border border-slate-700 hover:border-primary transition flex flex-col h-full">
+                        <h3 class="text-2xl font-bold text-white mb-2">Basic</h3>
+                        <div class="flex flex-col mb-6">
+                            <span class="text-3xl font-bold text-primary">Rp 89k</span>
+                            <span class="text-sm text-slate-500 line-through mt-1">Rp 359k</span>
+                        </div>
+                        <ul class="text-slate-400 space-y-3 mb-8 text-sm flex-grow">
+                            <li>✓ Landing page sederhana</li>
+                            <li>✓ WebApp Up to 3 Menu</li>
+                            <li>✓ Desain Modern dan Responsif</li>
+                            <li>✓ Revisi Fungsi up to 2x</li>
+                            <li>✓ Gratis Perbaikan Error</li>
+                        </ul>
+                        <a href="http://lynk.id/robodigital/zql71qo7xy4e" target="_blank" class="block text-center w-full bg-slate-700 hover:bg-primary text-white py-3 rounded-lg font-bold transition-all duration-300 mt-auto">Pesan Basic</a>
+                    </div>
+                    <div class="bg-gradient-to-b from-primary/20 to-slate-800 rounded-2xl p-8 border border-primary relative transform md:-translate-y-4 flex flex-col h-full">
+                        <div class="absolute top-0 right-0 bg-primary text-white text-xs font-bold px-3 py-1 rounded-bl-lg rounded-tr-lg">Terlaris</div>
+                        <h3 class="text-2xl font-bold text-white mb-2">Standard</h3>
+                        <div class="flex flex-col mb-6">
+                            <span class="text-3xl font-bold text-white">Rp 198k</span>
+                            <span class="text-sm text-slate-400 line-through mt-1">Rp 788k</span>
+                        </div>
+                        <ul class="text-slate-300 space-y-3 mb-8 text-sm flex-grow">
+                            <li>✓ WebApp Semi Complex</li>
+                            <li>✓ WebApp Up to 6 Menu</li>
+                            <li>✓ Desain Modern dan Responsif</li>
+                            <li>✓ Revisi Fungsi up to 4x</li>
+                            <li>✓ Gratis Revisi UI/UX</li>
+                            <li>✓ Gratis Perbaikan Error</li>
+                        </ul>
+                        <a href="http://lynk.id/robodigital/3l3789xxr5kw" target="_blank" class="block text-center w-full bg-primary hover:bg-blue-600 text-white py-3 rounded-lg font-bold transition-all duration-300 shadow-lg shadow-primary/30 mt-auto">Pesan Standard</a>
+                    </div>
+                    <div class="bg-slate-800 rounded-2xl p-8 border border-slate-700 hover:border-secondary transition flex flex-col h-full">
+                        <h3 class="text-2xl font-bold text-white mb-2">Premium</h3>
+                        <div class="flex flex-col mb-6">
+                            <span class="text-3xl font-bold text-secondary">Rp 485k</span>
+                            <span class="text-sm text-slate-500 line-through mt-1">Rp 1.550k</span>
+                        </div>
+                        <ul class="text-slate-400 space-y-3 mb-8 text-sm flex-grow">
+                            <li>✓ WebApp Complex</li>
+                            <li>✓ WebApp 7-9 Menu</li>
+                            <li>✓ Desain Modern dan Responsif</li>
+                            <li>✓ Revisi Fungsi up to 8x</li>
+                            <li>✓ Gratis Revisi UI/UX</li>
+                            <li>✓ Gratis Perbaikan Error</li>
+                            <li>✓ Gratis Migrasi Hybrid Deployment</li>
+                        </ul>
+                        <a href="http://lynk.id/robodigital/o71xz7qpwy7y" target="_blank" class="block text-center w-full bg-slate-700 hover:bg-secondary text-white py-3 rounded-lg font-bold transition-all duration-300 mt-auto">Pesan Premium</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 8. Use Case -->
+        <section class="py-20 px-6 bg-gradient-to-b from-dark via-blue-950/20 to-dark">
+            <div class="container mx-auto max-w-5xl fly-in">
+                <h2 class="text-3xl font-bold text-white mb-10 text-center">Cocok Digunakan Untuk Apa?</h2>
+                <div class="flex flex-wrap justify-center gap-4">
+                    <span class="flex items-center px-6 py-3 bg-slate-800 border border-slate-700 rounded-full text-slate-300 shadow-sm hover:border-primary/50 transition">
+                        <svg class="w-5 h-5 mr-2 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        Landing Page Jualan
+                    </span>
+                    <span class="flex items-center px-6 py-3 bg-slate-800 border border-slate-700 rounded-full text-slate-300 shadow-sm hover:border-secondary/50 transition">
+                        <svg class="w-5 h-5 mr-2 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                        Form Pendaftaran Event
+                    </span>
+                    <span class="flex items-center px-6 py-3 bg-slate-800 border border-slate-700 rounded-full text-slate-300 shadow-sm hover:border-green-500/50 transition">
+                        <svg class="w-5 h-5 mr-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        Dashboard Data Internal
+                    </span>
+                    <span class="flex items-center px-6 py-3 bg-slate-800 border border-slate-700 rounded-full text-slate-300 shadow-sm hover:border-indigo-500/50 transition">
+                        <svg class="w-5 h-5 mr-2 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                        Company Profile
+                    </span>
+                    <span class="flex items-center px-6 py-3 bg-slate-800 border border-slate-700 rounded-full text-slate-300 shadow-sm hover:border-pink-500/50 transition">
+                        <svg class="w-5 h-5 mr-2 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+                        Sistem Input Data UMKM
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 10. Testimoni -->
+        <section class="py-20 px-6 bg-gradient-to-b from-dark to-slate-900">
+            <div class="container mx-auto max-w-6xl fly-in">
+                <h2 class="text-3xl font-bold text-white text-center mb-12">Kata Mereka 💬</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-slate-900 p-6 rounded-xl border border-slate-700">
+                        <p class="text-slate-400 text-sm mb-4">"Keren! Pembuatan website ternyata bisa semudah dan secepat ini. Bisnis UMKM saya sekarang punya webapp yang profesional tanpa pusing mikir teknis atau coding."</p>
+                        <p class="text-white font-bold">- Agus, Pemilik UMKM</p>
+                    </div>
+                    <div class="bg-slate-900 p-6 rounded-xl border border-slate-700">
+                        <p class="text-slate-400 text-sm mb-4">"Tutorial di portal VIP nya gampang dimengerti. Saya yang sama sekali gak paham coding sekarang bisa bikin aplikasi laporan Keuangan toko online sendiri!"</p>
+                        <p class="text-white font-bold">- Salwa, Penjual Online</p>
+                    </div>
+                    <div class="bg-slate-900 p-6 rounded-xl border border-slate-700">
+                        <p class="text-slate-400 text-sm mb-4">"Bisa bikin aplikasi apapun sendiri kalau segampang ini! biasa pusing ngurus pencatatan, laporan sekarang bisa Jauh lebih mudah dan murah. Mantab Bosku."</p>
+                        <p class="text-white font-bold">- Andi, Karyawan</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 13. Final CTA -->
+        <section class="py-24 px-6 relative overflow-hidden bg-gradient-to-b from-slate-900 via-purple-900/20 to-dark text-center">
+            <canvas class="abstract-canvas absolute inset-0 pointer-events-none opacity-40"></canvas>
+            <div class="absolute inset-0 bg-gradient-to-b from-transparent via-primary/10 to-transparent"></div>
+            
+            <div class="container mx-auto fly-in relative z-10">
+                <h2 class="text-3xl md:text-5xl font-bold text-white mb-4">Siap Go-Digital Hari Ini?</h2>
+                <p class="text-lg text-slate-400 mb-10 max-w-2xl mx-auto">Tinggalkan cara lama yang mahal. Beralih ke teknologi modern yang hemat dan efisien sekarang juga.</p>
+                <div class="flex justify-center gap-4">
+                    <a href="https://lynk.id/robodigital/9r1dq2qzmzzn" target="_blank" class="inline-block bg-gradient-to-r from-primary to-secondary text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition transform">Mulai Project Baru</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 14. Contact Form -->
+        <section id="kontak" class="py-20 px-6 relative bg-gradient-to-b from-dark via-indigo-950/20 to-dark">
+            <div class="container mx-auto max-w-6xl fly-in">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-stretch">
+                    
+                    <div class="h-full">
+                        <h2 class="text-3xl font-bold text-white mb-6">Pertanyaan Umum (FAQ)</h2>
+                        <div class="space-y-4">
+                            <details class="group bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer transition hover:border-primary/50">
+                                <summary class="flex justify-between items-center font-semibold p-4 text-white select-none">
+                                    <span>Apa itu Google Apps Script (GAS)?</span>
+                                    <span class="transition group-open:rotate-180 text-primary">
+                                        <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </span>
+                                </summary>
+                                <div class="text-slate-400 px-4 pb-4 text-sm leading-relaxed">
+                                    GAS adalah platform gratis dari Google yang memungkinkan kita membuat aplikasi web dan otomasi. Sangat cocok untuk website ringan karena tidak memerlukan biaya hosting bulanan.
+                                </div>
+                            </details>
+                            
+                            <details class="group bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer transition hover:border-primary/50">
+                                <summary class="flex justify-between items-center font-semibold p-4 text-white select-none">
+                                    <span>Apakah saya butuh keahlian coding?</span>
+                                    <span class="transition group-open:rotate-180 text-primary">
+                                        <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </span>
+                                </summary>
+                                <div class="text-slate-400 px-4 pb-4 text-sm leading-relaxed">
+                                    Tidak sama sekali! Bergabung dengan Group VIP untuk memakai custom mini app kami di Gemini yang siap pakai dan sangat mudah dipelajari, atau Anda bisa menggunakan jasa pembuatan Webapp dari kami.
+                                </div>
+                            </details>
+
+                            <details class="group bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer transition hover:border-primary/50">
+                                <summary class="flex justify-between items-center font-semibold p-4 text-white select-none">
+                                    <span>Di mana data website saya disimpan?</span>
+                                    <span class="transition group-open:rotate-180 text-primary">
+                                        <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </span>
+                                </summary>
+                                <div class="text-slate-400 px-4 pb-4 text-sm leading-relaxed">
+                                    Semua data yang diinput melalui website Anda akan langsung tersimpan secara terstruktur dan aman di Google Spreadsheet milik akun Google Anda sendiri.
+                                </div>
+                            </details>
+
+                            <details class="group bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer transition hover:border-primary/50">
+                                <summary class="flex justify-between items-center font-semibold p-4 text-white select-none">
+                                    <span>Apakah benar-benar gratis biaya bulanan?</span>
+                                    <span class="transition group-open:rotate-180 text-primary">
+                                        <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </span>
+                                </summary>
+                                <div class="text-slate-400 px-4 pb-4 text-sm leading-relaxed">
+                                    Ya! Anda hanya perlu membayar sekali untuk Akses VIP atau jasa pembuatan webapp. Servernya menggunakan infrastruktur Google sehingga Anda terbebas dari biaya perpanjangan server/hosting. Kecuali kamu ingin hosting di website tertentu dan menggunakan domain sendiri.
+                                </div>
+                            </details>
+
+                            <details class="group bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer transition hover:border-primary/50">
+                                <summary class="flex justify-between items-center font-semibold p-4 text-white select-none">
+                                    <span>Apa keuntungan bergabung di Group VIP RoboDigimart?</span>
+                                    <span class="transition group-open:rotate-180 text-primary">
+                                        <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </span>
+                                </summary>
+                                <div class="text-slate-400 px-4 pb-4 text-sm leading-relaxed">
+                                    Member VIP mendapat akses custom tools eksklusif, template gratis, modul e-learning, diskusi prioritas, dan bonus sharing akses AI Gemini Pro selama 1 bulan (selama persediaan masih ada).
+                                </div>
+                            </details>
+
+                            <details class="group bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer transition hover:border-primary/50">
+                                <summary class="flex justify-between items-center font-semibold p-4 text-white select-none">
+                                    <span>Berapa lama proses pembuatan jika pakai jasa RoboDigimart?</span>
+                                    <span class="transition group-open:rotate-180 text-primary">
+                                        <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </span>
+                                </summary>
+                                <div class="text-slate-400 px-4 pb-4 text-sm leading-relaxed">
+                                    Estimasi pengerjaan sangat cepat, biasanya berkisar antara 1 hingga 5 hari kerja, tergantung antrean dan seberapa kompleks fitur (paket) yang Anda pilih.
+                                </div>
+                            </details>
+
+                            <details class="group bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer transition hover:border-primary/50">
+                                <summary class="flex justify-between items-center font-semibold p-4 text-white select-none">
+                                    <span>Apakah tampilan websitenya responsif di HP?</span>
+                                    <span class="transition group-open:rotate-180 text-primary">
+                                        <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </span>
+                                </summary>
+                                <div class="text-slate-400 px-4 pb-4 text-sm leading-relaxed">
+                                    Tentu saja. Semua template kami dibangun dengan framework Tailwind CSS yang menjamin tampilan website 100% responsif dan rapi saat dibuka di HP, Tablet, maupun PC.
+                                </div>
+                            </details>
+
+                            <details class="group bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer transition hover:border-primary/50">
+                                <summary class="flex justify-between items-center font-semibold p-4 text-white select-none">
+                                    <span>Apakah ada garansi jika website error?</span>
+                                    <span class="transition group-open:rotate-180 text-primary">
+                                        <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </span>
+                                </summary>
+                                <div class="text-slate-400 px-4 pb-4 text-sm leading-relaxed">
+                                    Pasti! Kami memberikan layanan gratis perbaikan error (bug fixing) serta revisi fungsi sesuai dengan kuota batas revisi pada paket jasa yang Anda pesan dalam masa garansi.
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+
+                    <div class="h-full flex flex-col">
+                        <h2 class="text-3xl font-bold text-white mb-6">Hubungi Kami</h2>
+                        <p class="text-slate-400 mb-8">Punya pertanyaan atau butuh konsultasi? Tinggalkan pesan di bawah ini.</p>
+                        
+                        <form id="contactForm" class="bg-slate-800/50 p-6 md:p-8 rounded-xl border border-slate-700 shadow-xl flex-grow flex flex-col">
+                            <div class="hidden" aria-hidden="true">
+                                <label>Leave this empty</label>
+                                <input type="text" id="c_bot_trap" tabindex="-1" autocomplete="off">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-semibold text-slate-300 mb-2">Nama Lengkap</label>
+                                <input type="text" id="c_name" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary transition">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-sm font-semibold text-slate-300 mb-2">Email</label>
+                                <input type="email" id="c_email" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary transition">
+                            </div>
+                            <div class="mb-6 flex-grow flex flex-col">
+                                <label class="block text-sm font-semibold text-slate-300 mb-2">Pesan</label>
+                                <textarea id="c_message" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary transition flex-grow min-h-[150px] resize-none"></textarea>
+                            </div>
+                            <button type="submit" id="btnSubmit" class="w-full bg-primary hover:bg-blue-600 text-white font-bold py-3 rounded-lg transition flex justify-center items-center mt-auto">
+                                Kirim Pesan
+                            </button>
+                            <p id="formStatus" class="mt-4 text-center text-sm hidden"></p>
+                        </form>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="bg-dark py-8 px-6 text-center relative">
+            <div class="container mx-auto">
+                <p class="text-slate-500 text-sm">© 2026 Robo Digimart by Roboznapz. All rights reserved.</p>
+                <!-- Secret Admin Login Trigger -->
+                <button onclick="document.getElementById('loginModal').classList.remove('hidden')" class="absolute bottom-4 right-4 text-slate-700 hover:text-slate-400 transition" title="Admin Access">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </button>
+            </div>
+        </footer>
+
+        <!-- Floating WA Button -->
+        <a href="https://wa.link/337mjr" target="_blank" class="fixed bottom-6 right-6 bg-green-500 text-white p-2 rounded-full shadow-lg hover:bg-green-600 hover:scale-110 transition z-50 flex items-center justify-center">
+            <svg class="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.098.824z"/></svg>
+        </a>
+    </div>
+
+    <!-- Login Modal (Hidden Default) -->
+    <div id="loginModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center">
+        <div class="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-full max-w-md shadow-2xl relative">
+            <button onclick="document.getElementById('loginModal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-500 hover:text-white">✕</button>
+            <h3 class="text-2xl font-bold text-white mb-6 text-center">Admin Access</h3>
+            <form id="loginForm">
+                <input type="text" id="username" placeholder="Username" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white mb-4">
+                <input type="password" id="password" placeholder="Password" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white mb-6">
+                <button type="submit" id="btnLogin" class="w-full bg-secondary hover:bg-purple-600 text-white font-bold py-3 rounded-lg transition">Login</button>
+                <p id="loginStatus" class="mt-4 text-center text-sm text-red-400 hidden"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard (Hidden Default) -->
+    <div id="admin-view" class="hidden min-h-screen bg-slate-900 p-6">
+        <div class="container mx-auto max-w-5xl">
+            <div class="flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <h1 class="text-2xl font-bold text-white">Dashboard <span class="text-primary">Admin</span></h1>
+                <button id="btnLogout" class="bg-red-500/20 text-red-400 border border-red-500/50 px-4 py-2 rounded-lg hover:bg-red-500 hover:text-white transition">Logout</button>
+            </div>
+            
+            <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
+                <div class="p-4 bg-slate-800/50 border-b border-slate-700 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-white">Pesan Masuk (Leads)</h2>
+                    <button onclick="App.loadContacts()" class="text-sm bg-slate-700 px-3 py-1 rounded text-white hover:bg-slate-600">Refresh</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-slate-300">
+                        <thead class="text-xs text-slate-400 bg-slate-900/50 uppercase">
+                            <tr><th class="px-6 py-3">Tanggal</th><th class="px-6 py-3">Nama</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Pesan</th></tr>
+                        </thead>
+                        <tbody id="contactTableBody" class="divide-y divide-slate-700/50">
+                            <tr><td colspan="4" class="px-6 py-4 text-center">Memuat data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Frontend Logic (IIFE untuk isolasi scope keamanan) -->
+    <script>
+        // [GLOBAL PARAMETER] WAJIB DIISI: Masukkan URL Web App GAS Anda setelah di-deploy
+        const API_URL = "https://script.google.com/macros/s/AKfycbyh67HBVwnrBLSp34ju8kIaifUACoK4Uop660Vg9WraFlIvlkjgij3GPpof9AEwblED/exec"; 
+
+        const App = (function() {
+            // Cek apakah berjalan di lingkungan GAS atau eksternal
+            const isGAS = typeof google !== 'undefined' && google.script;
+
+            // Logika UI & Animasi
+            const initUI = () => {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('visible');
+                            observer.unobserve(entry.target);
+                        }
+                    });
+                }, { threshold: 0.1 });
+
+                document.querySelectorAll('.fly-in').forEach(el => observer.observe(el));
+            };
+
+            // Animasi Geometri Abstrak (Plexus Effect)
+            // Animasi Geometri Abstrak (Plexus Effect) - Mendukung banyak Canvas
+            const initAbstractAnimation = () => {
+                // Ambil semua elemen canvas dengan class abstract-canvas
+                const canvases = document.querySelectorAll('.abstract-canvas, #abstract-canvas');
+                
+                canvases.forEach(canvas => {
+                    const container = canvas.parentElement;
+                    if (!container) return;
+                    
+                    const ctx = canvas.getContext('2d');
+                    let width, height;
+                    let particles = [];
+
+                    // Set ukuran canvas menyesuaikan ukuran kontainer (section)-nya
+                    const resize = () => {
+                        width = container.offsetWidth;
+                        height = container.offsetHeight;
+                        canvas.width = width;
+                        canvas.height = height;
+                        initParticles();
+                    };
+
+                    // Membuat titik-titik partikel
+                    const initParticles = () => {
+                        particles = [];
+                        // Kepadatan partikel responsif terhadap ukuran layar
+                        const numParticles = Math.min(Math.floor((width * height) / 12000), 100); 
+                        
+                        for (let i = 0; i < numParticles; i++) {
+                            particles.push({
+                                x: Math.random() * width,
+                                y: Math.random() * height,
+                                vx: (Math.random() - 0.5) * 0.8,
+                                vy: (Math.random() - 0.5) * 0.8,
+                                radius: Math.random() * 2 + 1,
+                                color: Math.random() > 0.5 ? '#3b82f6' : '#8b5cf6'
+                            });
+                        }
+                    };
+
+                    // Menggambar dan menggerakkan frame per frame
+                    const draw = () => {
+                        ctx.clearRect(0, 0, width, height);
+                        
+                        for (let i = 0; i < particles.length; i++) {
+                            let p = particles[i];
+                            
+                            p.x += p.vx;
+                            p.y += p.vy;
+
+                            if (p.x < 0 || p.x > width) p.vx *= -1;
+                            if (p.y < 0 || p.y > height) p.vy *= -1;
+
+                            ctx.beginPath();
+                            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                            ctx.fillStyle = p.color;
+                            ctx.fill();
+
+                            for (let j = i + 1; j < particles.length; j++) {
+                                let p2 = particles[j];
+                                let dx = p.x - p2.x;
+                                let dy = p.y - p2.y;
+                                let dist = Math.sqrt(dx * dx + dy * dy);
+
+                                if (dist < 160) {
+                                    ctx.beginPath();
+                                    ctx.moveTo(p.x, p.y);
+                                    ctx.lineTo(p2.x, p2.y);
+                                    ctx.strokeStyle = `rgba(139, 92, 246, ${1 - dist/160})`; 
+                                    ctx.lineWidth = 0.6;
+                                    ctx.stroke();
+                                }
+                            }
+                        }
+                        requestAnimationFrame(draw);
+                    };
+
+                    window.addEventListener('resize', resize);
+                    resize();
+                    draw();
+                });
+            };
+
+            // Logika Form Kontak
+            const initContactForm = () => {
+                document.getElementById('contactForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const btn = document.getElementById('btnSubmit');
+                    const status = document.getElementById('formStatus');
+                    const data = {
+                        name: document.getElementById('c_name').value,
+                        email: document.getElementById('c_email').value,
+                        message: document.getElementById('c_message').value,
+                        bot_trap: document.getElementById('c_bot_trap').value
+                    };
+
+                    btn.disabled = true; btn.innerText = 'Mengirim...'; btn.classList.add('opacity-50');
+                    status.classList.remove('hidden', 'text-green-400', 'text-red-400');
+                    
+                    if (isGAS) {
+                        google.script.run.withSuccessHandler(res => {
+                            btn.disabled = false; btn.innerText = 'Kirim Pesan'; btn.classList.remove('opacity-50');
+                            status.innerText = res.message;
+                            status.classList.add(res.success ? 'text-green-400' : 'text-red-400');
+                            if(res.success) document.getElementById('contactForm').reset();
+                        }).saveContact(data);
+                    } else if (API_URL && API_URL.startsWith("http")) {
+                        // Jalur Fetch API untuk Vercel / Eksternal
+                        fetch(API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // text/plain menghindari error CORS Preflight di GAS
+                            body: JSON.stringify({ action: 'saveContact', payload: data })
+                        })
+                        .then(response => response.json())
+                        .then(res => {
+                            btn.disabled = false; btn.innerText = 'Kirim Pesan'; btn.classList.remove('opacity-50');
+                            status.innerText = res.message;
+                            status.classList.add(res.success ? 'text-green-400' : 'text-red-400');
+                            if(res.success) document.getElementById('contactForm').reset();
+                        })
+                        .catch(err => {
+                            btn.disabled = false; btn.innerText = 'Kirim Pesan'; btn.classList.remove('opacity-50');
+                            status.innerText = "Terjadi kesalahan koneksi server.";
+                            status.classList.add('text-red-400');
+                        });
+                    } else {
+                        btn.disabled = false; btn.innerText = 'Kirim Pesan'; btn.classList.remove('opacity-50');
+                        status.innerText = "Error: API URL belum disetting di frontend.";
+                        status.classList.add('text-red-400');
+                    }
+                });
+            };
+
+            // Logika Autentikasi
+            const initAuth = () => {
+                document.getElementById('loginForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const user = document.getElementById('username').value;
+                    const pass = document.getElementById('password').value;
+                    const btn = document.getElementById('btnLogin');
+                    const status = document.getElementById('loginStatus');
+
+                    btn.innerText = 'Memverifikasi...';
+                    status.classList.add('hidden');
+
+                    if (isGAS) {
+                        google.script.run.withSuccessHandler(res => {
+                            btn.innerText = 'Login';
+                            if (res.success) showAdmin(res.username);
+                            else { status.innerText = res.message; status.classList.remove('hidden'); }
+                        }).loginUser(user, pass);
+                    } else if (API_URL && API_URL.startsWith("http")) {
+                         fetch(API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({ action: 'login', payload: { username: user, password: pass } })
+                        })
+                        .then(response => response.json())
+                        .then(res => {
+                            btn.innerText = 'Login';
+                            if (res.success) showAdmin(res.username);
+                            else { status.innerText = res.message; status.classList.remove('hidden'); }
+                        })
+                        .catch(err => {
+                            btn.innerText = 'Login';
+                            status.innerText = "Koneksi ke server gagal."; 
+                            status.classList.remove('hidden');
+                        });
+                    }
+                });
+
+                document.getElementById('btnLogout').addEventListener('click', () => {
+                    document.getElementById('admin-view').classList.add('hidden');
+                    document.getElementById('public-view').classList.remove('hidden');
+                    document.getElementById('loginForm').reset();
+                });
+            };
+
+            const showAdmin = (username) => {
+                document.getElementById('loginModal').classList.add('hidden');
+                document.getElementById('public-view').classList.add('hidden');
+                document.getElementById('admin-view').classList.remove('hidden');
+                window.scrollTo(0,0);
+                loadContacts();
+            };
+
+            const loadContacts = () => {
+                const tbody = document.getElementById('contactTableBody');
+                tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center">Memuat data terbaru...</td></tr>';
+                
+                if (isGAS) {
+                    google.script.run.withSuccessHandler(data => renderTable(data)).getContacts();
+                } else if (API_URL && API_URL.startsWith("http")) {
+                    fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'getContacts' })
+                    })
+                    .then(response => response.json())
+                    .then(data => renderTable(data))
+                    .catch(err => {
+                        tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-red-400">Gagal mengambil data dari server.</td></tr>';
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-red-400">Peringatan: API_URL belum diatur di kode frontend.</td></tr>';
+                }
+            };
+
+            const renderTable = (data) => {
+                const tbody = document.getElementById('contactTableBody');
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-500">Belum ada pesan masuk.</td></tr>';
+                    return;
+                }
+                let html = '';
+                data.forEach(row => {
+                    html += `<tr class="hover:bg-slate-800/50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap">${new Date(row[0]).toLocaleString('id-ID')}</td>
+                        <td class="px-6 py-4">${row[1]}</td>
+                        <td class="px-6 py-4">${row[2]}</td>
+                        <td class="px-6 py-4 text-slate-400">${row[3]}</td>
+                    </tr>`;
+                });
+                tbody.innerHTML = html;
+            };
+
+            // Animasi Efek Mengetik (Typewriter)
+            const initTypewriter = () => {
+                const textElement = document.getElementById('typewriter-text');
+                if (!textElement) return;
+
+                const words = [
+                    "Jago Coding",
+                    "Biaya Hosting",
+                    "Buang Waktu",
+                    "Biaya Langganan",
+                    "Database Rumit"
+                ];
+                let wordIndex = 0;
+                let charIndex = 0;
+                let isDeleting = false;
+                let typeSpeed = 100;
+
+                const type = () => {
+                    const currentWord = words[wordIndex];
+                    
+                    if (isDeleting) {
+                        textElement.innerText = currentWord.substring(0, charIndex - 1);
+                        charIndex--;
+                        typeSpeed = 40; // Kecepatan menghapus yang lebih ngebut
+                    } else {
+                        textElement.innerText = currentWord.substring(0, charIndex + 1);
+                        charIndex++;
+                        typeSpeed = 80; // Kecepatan saat mengetik
+                    }
+
+                    if (!isDeleting && charIndex === currentWord.length) {
+                        isDeleting = true;
+                        typeSpeed = 2000; // Jeda waktu diam setelah 1 kata selesai diketik
+                    } else if (isDeleting && charIndex === 0) {
+                        isDeleting = false;
+                        wordIndex = (wordIndex + 1) % words.length;
+                        typeSpeed = 400; // Jeda waktu diam sebelum mulai mengetik kata baru
+                    }
+
+                    setTimeout(type, typeSpeed);
+                };
+
+                // Mulai efek animasi 1 detik setelah halaman dimuat
+                setTimeout(type, 1000);
+            };
+
+            // Inisialisasi saat DOM siap
+            document.addEventListener("DOMContentLoaded", () => {
+                initUI();
+                initAbstractAnimation();
+                initContactForm();
+                initAuth();
+                initTypewriter();
+            });
+
+            return { loadContacts }; // Expose method tertentu
+        })();
+    </script>
+</body>
+</html>
