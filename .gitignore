@@ -12,3 +12,4 @@ node_modules/
 cloudflare-dist/
 artifacts/
 .wrangler/
+.dev.vars*

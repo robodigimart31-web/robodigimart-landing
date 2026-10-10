@@ -54,9 +54,10 @@ function EmptyCurve() {
  const {t}=useCopy();
   return <div className="empty-curve"><Icon name="chart" size={30}/><strong>{t("Awaiting performance history")}</strong><span>{t("Equity curve will appear after data is connected.")}</span></div>;
 }
-function MonthlyBars({points, currency, balance = false}: {points: PerformancePoint[];currency: string;balance?:boolean}) {
+function MonthlyBars({points, currency, balance = false, monthly}: {points: PerformancePoint[];currency: string;balance?:boolean;monthly?:{month:string;change:number}[]}) {
  const {t,locale}=useCopy();
   const bars = useMemo(() => {
+    if (monthly) return monthly.slice(-8);
     const map = new Map<string, {first: number; last: number}>();
     for (const p of points) {
       const amount = balance ? p.balance : p.equity;
@@ -72,8 +73,8 @@ function MonthlyBars({points, currency, balance = false}: {points: PerformancePo
       const prev = index > 0 ? entries[index - 1][1].last : values.first;
       return {month, change: values.last - prev};
     });
-  }, [points, balance]);
-  if (points.length < 2 || bars.length < 1) return <div className="mini-empty">{t("Monthly returns will appear here.")}</div>;
+  }, [points, balance, monthly]);
+  if ((!monthly && points.length < 2) || bars.length < 1) return <div className="mini-empty">{t("Monthly returns will appear here.")}</div>;
   const maximum = Math.max(...bars.map(b => Math.abs(b.change)), 1);
   return <div className="monthly-chart">{bars.map(bar => <div key={bar.month} className="month-col" title={`${bar.month}: ${money(bar.change,currency,locale)}`}><div className="month-bar-track"><div className={`month-bar ${bar.change < 0 ? "negative" : ""}`} style={{height: `${Math.max(3, Math.abs(bar.change)/maximum * 85)}%`}}/></div><span>{new Date(bar.month + "-01T00:00:00Z").toLocaleDateString(languageTag(locale),{month:"short",timeZone:"UTC"})}</span></div>)}</div>;
 }
@@ -81,8 +82,10 @@ function DataCard({kind, dataset, range, setRange, loading, failed}: {kind:"live
   const {t,locale}=useCopy();
   const isLive = kind === "live";
   const report = dataset?.report;
-  const balance = dataset?.chart_basis === "balance";
-  const points = dataset ? filteredPoints(dataset.points.filter(p => balance || p.equity !== null), range) : [];
+  const [liveCurve, setLiveCurve] = useState<"balance"|"equity">("balance");
+  const balance = isLive ? liveCurve === "balance" : dataset?.chart_basis === "balance";
+  const sourcePoints = isLive && balance ? dataset?.balance_points ?? [] : dataset?.points ?? [];
+  const points = filteredPoints(sourcePoints.filter(p => balance || p.equity !== null), range);
   const isStale = isLive && report ? (Date.now() - new Date(report.updated_at).getTime()) > 15*3600*1000 : false;
   const currency = report?.currency || "USD";
   return <article className={`performance-card ${isLive ? "live-card" : "test-card"}`}>
@@ -99,11 +102,13 @@ function DataCard({kind, dataset, range, setRange, loading, failed}: {kind:"live
         <div className="metric"><label>{t("Profit Factor")}</label><strong>{num(report?.profit_factor ?? null,locale)}</strong></div>
         <div className="metric"><label>{isLive ? t("Snapshot DD*") : t(balance ? "Max Equity DD (relative)" : "Max Drawdown")}</label><strong>{report?.max_drawdown_pct == null ? "—" : `${num(report.max_drawdown_pct,locale,2)}%`}</strong></div>
       </div>
+      {isLive && report && <div className="chart-ranges" role="group" aria-label={t("Chart type")}><button aria-pressed={liveCurve === "balance"} className={liveCurve === "balance" ? "selected" : ""} onClick={()=>setLiveCurve("balance")}>{t("Balance")}</button><button aria-pressed={liveCurve === "equity"} className={liveCurve === "equity" ? "selected" : ""} onClick={()=>setLiveCurve("equity")}>{t("Equity")}</button></div>}
       <div className="chart-head"><h4>{t(balance ? "Balance Curve (daily close)" : "Equity Curve")}</h4><div className="chart-ranges" role="group" aria-label={`${t("Range")} ${t(isLive ? "Real Account Performance" : "Backtest Performance")}`}>{ranges.map(r=><button aria-pressed={range===r} onClick={()=>setRange(r)} className={range===r ? "selected" : ""} key={r}>{locale === "id" ? ({"1M":"1B","3M":"3B","6M":"6B","ALL":"SEMUA"}[r]) : r}</button>)}</div></div>
       {failed ? <div className="empty-curve">{t("Performance data is temporarily unavailable.")}</div> : <EquityChart points={points} balance={balance}/>}
       {points.length >= 2 && <div className="chart-dates"><span>{dateString(points[0].recorded_at,locale)}</span><span>{dateString(points[points.length-1].recorded_at,locale)}</span></div>}
-      <div className="p-bottom"><div><h4>{t("Monthly P/L")}</h4><MonthlyBars points={dataset?.points || []} currency={currency} balance={balance}/></div><div className="account-facts"><h4>{t("Trading Information")}</h4><dl><dt>{t("Account")}</dt><dd>{(report?.account_type === "backtest" ? t("BACKTEST") : report?.account_type.toUpperCase()) || "—"}</dd><dt>{t("Initial Deposit")}</dt><dd>{money(report?.initial_balance ?? null,currency,locale)}</dd><dt>{t("Symbol")}</dt><dd>{report?.symbol || "—"}</dd><dt>{t("Total Trades")}</dt><dd>{report?.total_trades?.toLocaleString(languageTag(locale)) ?? "—"}</dd><dt>{t("Period")}</dt><dd>{report?.period_start ? `${dateString(report.period_start,locale)} - ${report.period_end ? dateString(report.period_end,locale) : ""}` : "—"}</dd></dl></div></div>
-      {balance && <p className="card-disclaimer">{t("Balance excludes floating P/L. Drawdown is MT5 relative equity drawdown; monthly figures are balance changes. Metrics cover the full test period.")} {dataset?.timeframe} / {dataset?.history_quality}</p>}
+      <div className="p-bottom"><div><h4>{t("Monthly P/L")}</h4><MonthlyBars points={dataset?.points || []} currency={currency} balance={balance} monthly={dataset?.monthly}/></div><div className="account-facts"><h4>{t("Trading Information")}</h4><dl><dt>{t("Account")}</dt><dd>{(report?.account_type === "backtest" ? t("BACKTEST") : report?.account_type.toUpperCase()) || "—"}</dd><dt>{t("Initial Deposit")}</dt><dd>{money(report?.initial_balance ?? null,currency,locale)}</dd><dt>{t("Symbol")}</dt><dd>{report?.symbol || "—"}</dd><dt>{t(isLive ? "Closed Positions" : "Total Trades")}</dt><dd>{report?.total_trades?.toLocaleString(languageTag(locale)) ?? "—"}</dd><dt>{t("Period")}</dt><dd>{report?.period_start ? `${dateString(report.period_start,locale)} - ${report.period_end ? dateString(report.period_end,locale) : ""}` : "—"}</dd></dl></div></div>
+      {balance && !isLive && <p className="card-disclaimer">{t("Balance excludes floating P/L. Drawdown is MT5 relative equity drawdown; monthly figures are balance changes. Metrics cover the full test period.")} {dataset?.timeframe} / {dataset?.history_quality}</p>}
+      {isLive && report && <p className="card-disclaimer">{t("History uses broker time. Net profit excludes deposits and withdrawals. Win rate and profit factor use fully closed positions, including entry and exit costs. Equity starts when monitoring connects; snapshot drawdown is unavailable across cash-flow changes.")}</p>}
       <p className="card-disclaimer"><Icon name="info" size={14}/>{isLive ? t("*Drawdown from periodic snapshots may miss intraday peaks. Results are self-reported by the connected MT5 terminal, not independently verified.") : t("Backtests are simulations, not actual executions, and do not guarantee future performance.")}</p>
     </div>
   </article>;
@@ -114,16 +119,13 @@ export function PerformanceDashboard({locale = "id"}: {locale?:Locale}) {
 function Dashboard() {
  const {t}=useCopy();
   const [data, setData] = useState<PublicPerformanceResponse>({configured:false,live:null,backtest:importedBacktest});
-  const [loading, setLoading] = useState(process.env.NEXT_PUBLIC_STATIC_LANDING !== "1");
+  const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [liveRange,setLiveRange] = useState<Range>("ALL");
   const [backtestRange,setBacktestRange] = useState<Range>("ALL");
   useEffect(()=>{
-    // Landing-only deployment has no live data service yet. Render the honest
-    // empty state directly, without polling a non-existent API on every visit.
-    if (process.env.NEXT_PUBLIC_STATIC_LANDING === "1") return;
     const controller = new AbortController();
-    fetch("/api/performance?product=quadriga", {signal:controller.signal})
+    fetch("https://helix-performance.robo-digimart31.workers.dev/api/performance", {signal:controller.signal})
       .then(async response=>{if (!response.ok) throw new Error("Unavailable");return response.json() as Promise<PublicPerformanceResponse>;})
       .then(result => setData({...result, backtest:result.backtest ?? importedBacktest})).catch(err=>{if (err.name !== "AbortError") setFailed(true);})
       .finally(()=>{if (!controller.signal.aborted) setLoading(false);});

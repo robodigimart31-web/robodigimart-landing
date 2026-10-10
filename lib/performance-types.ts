@@ -23,6 +23,9 @@ export interface PerformancePoint {
   equity: number | null;
 }
 export interface PerformanceDataset {
+  balance_points?: PerformancePoint[];
+  monthly?: {month:string;change:number}[];
+  cashflow?: number;
   chart_basis?: string;
   timeframe?: string;
   history_quality?: string;

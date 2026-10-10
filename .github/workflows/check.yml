@@ -21,6 +21,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --test performance-worker/metrics.test.mjs
       - run: npm run build
       - run: npm run typecheck
       - run: npm run build:cloudflare

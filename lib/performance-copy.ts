@@ -1,4 +1,9 @@
 export const performanceId = {
+  "Chart type": "Jenis grafik",
+  "Balance": "Saldo",
+  "Equity": "Ekuitas",
+  "Closed Positions": "Posisi Selesai",
+  "History uses broker time. Net profit excludes deposits and withdrawals. Win rate and profit factor use fully closed positions, including entry and exit costs. Equity starts when monitoring connects; snapshot drawdown is unavailable across cash-flow changes.": "Riwayat memakai waktu broker. Laba bersih tidak mencakup deposit dan penarikan. Tingkat kemenangan dan faktor profit memakai posisi yang sudah ditutup penuh, termasuk biaya masuk dan keluar. Ekuitas direkam sejak pemantauan tersambung; drawdown cuplikan tidak tersedia jika ada perubahan arus dana.",
   "Historical account balance chart": "Grafik riwayat saldo akun",
   "Initial Deposit": "Modal Awal",
   "Balance Curve (daily close)": "Kurva Saldo (akhir hari)",
