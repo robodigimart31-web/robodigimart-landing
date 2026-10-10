@@ -185,5 +185,5 @@
   document.addEventListener('click',e=>{if(e.target.classList?.contains('modal-backdrop'))closeModal()});
   render();
 </script>
-</body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script>(async()=>{try{const c=supabase.createClient("https://wouwoefzghecuiknznvs.supabase.co","sb_publishable_FDLLBcmYFGiS9PDbyvgDtQ_UWUB8fUc");const {data:{session}}=await c.auth.getSession();if(session){const {data:m}=await c.from("helix_members").select("role").eq("id",session.user.id).maybeSingle();if(m?.role==="admin")location.replace("/vip/admin/")}}catch(e){console.warn("VIP session check failed",e)}})()</script></body>
 </html>
