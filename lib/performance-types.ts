@@ -20,9 +20,12 @@ export interface PerformanceReport {
 export interface PerformancePoint {
   recorded_at: string;
   balance: number;
-  equity: number;
+  equity: number | null;
 }
 export interface PerformanceDataset {
+  chart_basis?: string;
+  timeframe?: string;
+  history_quality?: string;
   report: PerformanceReport;
   points: PerformancePoint[];
 }

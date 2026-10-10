@@ -1,4 +1,9 @@
 export const performanceId = {
+  "Historical account balance chart": "Grafik riwayat saldo akun",
+  "Initial Deposit": "Modal Awal",
+  "Balance Curve (daily close)": "Kurva Saldo (akhir hari)",
+  "Max Equity DD (relative)": "DD Ekuitas Relatif Maks.",
+  "Balance excludes floating P/L. Drawdown is MT5 relative equity drawdown; monthly figures are balance changes. Metrics cover the full test period.": "Saldo tidak mencakup laba/rugi mengambang. Drawdown memakai penurunan ekuitas relatif MT5; angka bulanan adalah perubahan saldo. Statistik mencakup seluruh periode pengujian.",
   "Historical account equity chart": "Grafik riwayat ekuitas akun",
   "Awaiting performance history": "Menunggu riwayat performa",
   "Equity curve will appear after data is connected.": "Kurva ekuitas akan muncul setelah data terhubung.",
