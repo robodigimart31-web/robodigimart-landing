@@ -1,2 +1,6 @@
 / /id 302
 /products/quadriga /id/products/quadriga 301
+
+# VIP portal host mapping. Cloudflare Pages serves the portal shell from /vip.
+https://vipmember.robodigimart.com/ /vip/ 200
+https://vipmember.robodigimart.com/admin /vip/admin.html 200
