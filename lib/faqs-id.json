@@ -1,0 +1,42 @@
+[
+  [
+    "Apa itu HELIX QUADRIGA?",
+    "Expert Advisor untuk MetaTrader 5 dengan arsitektur empat logika trading. Pelajari pendekatan produk dan hasil pengujiannya sebelum menggunakan."
+  ],
+  [
+    "Apakah backtest sama dengan hasil real?",
+    "Tidak. Backtest adalah simulasi historis. Spread, slippage, kondisi broker, dan eksekusi dapat membuat hasil akun real berbeda. Keduanya disajikan terpisah."
+  ],
+  [
+    "Apakah ada jaminan profit?",
+    "Tidak. Trading dapat mengalami kerugian dan drawdown. Hasil historis maupun backtest tidak menjamin hasil di masa depan."
+  ],
+  [
+    "Bagaimana cara mendapatkan QUADRIGA?",
+    "Hubungi tim HELIX untuk informasi harga, kompatibilitas broker, ketentuan lisensi, dan panduan pemasangan. Siapkan MetaTrader 5 pada komputer atau VPS."
+  ],
+  [
+    "Apa itu Expert Advisor (EA) atau robot trading?",
+    "Expert Advisor (EA) adalah program yang berjalan di platform trading untuk menganalisis pasar dan dapat menjalankan transaksi secara otomatis sesuai aturan yang diprogram. HELIX QUADRIGA adalah EA untuk MetaTrader 5 dengan arsitektur empat logika. Otomatisasi membantu menjalankan proses secara konsisten, tetapi tidak membuat strategi bebas risiko atau menjamin profit. Pengguna tetap perlu memahami pengaturan dan memantau operasional EA."
+  ],
+  [
+    "Apa itu MetaTrader 5 (MT5), dan apa hubungannya dengan HELIX QUADRIGA?",
+    "MetaTrader 5 (MT5) adalah platform trading dari MetaQuotes untuk mengakses akun broker, membaca grafik, melakukan analisis, dan menjalankan trading otomatis. MT5 merupakan platformnya, sedangkan HELIX QUADRIGA merupakan Expert Advisor yang dipasang di dalamnya. Instrumen dan kondisi transaksi mengikuti layanan broker. Sebelum memasang QUADRIGA, konfirmasikan jenis akun, instrumen, dan konfigurasi MT5 yang didukung oleh versi produk Anda."
+  ],
+  [
+    "Apa perbedaan EA dengan indikator trading?",
+    "Indikator trading mengolah data harga untuk membantu analisis, misalnya menampilkan tren atau sinyal pada grafik. EA dapat menggunakan hasil analisis untuk menjalankan aturan transaksi secara otomatis jika izin trading diaktifkan. HELIX QUADRIGA termasuk Expert Advisor untuk MT5, bukan sekadar indikator pemberi sinyal. Perilaku transaksi mengikuti logika dan pengaturan EA; pengguna tetap bertanggung jawab memahami risiko penggunaannya."
+  ],
+  [
+    "Apakah HELIX QUADRIGA bisa digunakan di MetaTrader 4 (MT4)?",
+    "HELIX QUADRIGA pada website ini ditujukan untuk MetaTrader 5 (MT5). MetaTrader 4 dan MetaTrader 5 adalah platform berbeda; file EA yang dibuat untuk MT5 tidak dapat langsung dipasang sebagai EA MT4. Gunakan versi MT5 yang sesuai dengan panduan produk dan pastikan broker menyediakan akun MT5. Dukungan versi MT4 belum dinyatakan tersedia, jadi konfirmasikan platform sebelum membeli lisensi."
+  ],
+  [
+    "Apakah perlu VPS agar EA HELIX QUADRIGA tetap berjalan?",
+    "VPS adalah komputer virtual yang dapat tetap menyala ketika komputer pribadi Anda dimatikan. VPS tidak wajib jika komputer yang menjalankan MT5 tetap aktif dan terhubung ke internet. Namun, EA memerlukan lingkungan MT5 yang berjalan agar dapat melanjutkan tugasnya; menutup terminal lokal menghentikan EA di terminal tersebut. Jika memilih VPS, pastikan pemasangan QUADRIGA, koneksi broker, dan izin yang diperlukan sudah sesuai panduan produk."
+  ],
+  [
+    "Mengapa perlu mencoba EA di akun demo sebelum akun real?",
+    "Akun demo menggunakan dana virtual untuk membantu mempelajari pemasangan EA, pengaturan, dan perilaku strategi tanpa mempertaruhkan dana real. Untuk HELIX QUADRIGA, konfirmasikan dahulu apakah lisensi Anda mengizinkan akun demo, lalu ikuti konfigurasi yang didukung. Hasil demo dapat berbeda dari akun real karena kondisi eksekusi dan broker. Pengujian membantu memahami operasional, tetapi bukan bukti bahwa EA akan selalu menghasilkan keuntungan."
+  ]
+]

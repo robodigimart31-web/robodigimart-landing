@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+.vercel/
+*.tsbuildinfo
+.DS_Store
+.cloudflare-build/
+cloudflare-dist/
+artifacts/
+.wrangler/
