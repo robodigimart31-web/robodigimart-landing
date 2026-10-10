@@ -15,7 +15,7 @@
     "total_trades": 4317,
     "period_start": "2026-01-01T00:00:00Z",
     "period_end": "2026-10-06T00:00:00Z",
-    "updated_at": "2026-10-10T07:44:45.689Z"
+    "updated_at": "2026-10-10T09:03:39.722Z"
   },
   "chart_basis": "balance",
   "timeframe": "M1",
@@ -1121,5 +1121,22 @@
       "balance": 20991.23,
       "equity": null
     }
-  ]
+  ],
+  "diagnostics": {
+    "distribution": {
+      "src": "/images/backtest/quadriga-hst-0203b1333110.png",
+      "width": 860,
+      "height": 400
+    },
+    "correlation": {
+      "src": "/images/backtest/quadriga-mfemae-632168f9250d.png",
+      "width": 860,
+      "height": 400
+    },
+    "holding": {
+      "src": "/images/backtest/quadriga-holding-9b7eedea5833.png",
+      "width": 860,
+      "height": 200
+    }
+  }
 }

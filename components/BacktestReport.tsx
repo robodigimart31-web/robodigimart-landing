@@ -5,6 +5,12 @@ import { choose, languageTag, type Locale } from "@/lib/i18n";
 export function BacktestReport({locale}:{locale:Locale}) {
   const t=(id:string,en:string)=>choose(locale,id,en);
   const {report,points}=data;
+  const diagnostics=(data as typeof data & {diagnostics?:Record<string,{src:string;width:number;height:number}>}).diagnostics;
+  const charts=[
+    {key:"distribution",title:t("Distribusi transaksi & hasil trading","Trade distribution & trading results"),description:t("Jumlah entry serta profit dan loss berdasarkan jam, hari, dan bulan.","Entries, profits and losses by hour, weekday and month.")},
+    {key:"correlation",title:t("Korelasi profit, MFE & MAE","Profit, MFE & MAE correlations"),description:t("Sebaran hasil transaksi terhadap pergerakan harga yang menguntungkan (MFE) dan merugikan (MAE) selama posisi terbuka.","Trade outcomes against favorable (MFE) and adverse (MAE) price excursions while positions were open.")},
+    {key:"holding",title:t("Durasi posisi","Position holding time"),description:t("Hubungan antara lama posisi terbuka dan hasil transaksi.","Trade outcomes relative to the length of time positions remained open.")},
+  ];
   const number=(v:number|null,digits=2)=>v===null?"—":new Intl.NumberFormat(languageTag(locale),{maximumFractionDigits:digits}).format(v);
   const money=(v:number|null)=>v===null?"—":new Intl.NumberFormat(languageTag(locale),{style:"currency",currency:report.currency,maximumFractionDigits:2}).format(v);
   const date=(v:string)=>new Intl.DateTimeFormat(languageTag(locale),{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(v));
@@ -33,6 +39,11 @@ export function BacktestReport({locale}:{locale:Locale}) {
       [t("Kualitas data","History quality"),locale === "id" ? data.history_quality.replace("real ticks","tick riil") : data.history_quality],
       [t("Broker pengujian","Test broker"),report.broker_label],
     ].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></aside></div>
+    <div className="bt-diagnostics">{charts.map((chart,index)=>{
+      const asset=diagnostics?.[chart.key];
+      if(!asset)return null;
+      return <figure key={chart.key} className="bt-diagnostic"><figcaption><span className="bt-chart-index">0{index+1}</span><div><h3>{chart.title}</h3><p>{chart.description}</p></div></figcaption>{chart.key === "distribution" && <div className="bt-panel-key"><span>{t("Jam trading","Trading hours")}</span><span>{t("Hari dalam minggu","Weekdays")}</span><span>{t("Bulan","Months")}</span></div>}<div className="bt-original-chart" role="region" aria-label={chart.title} tabIndex={0}><img src={asset.src} width={asset.width} height={asset.height} alt={chart.description} loading="lazy" decoding="async"/></div><p className="bt-scroll-hint">{t("Geser ke samping untuk melihat seluruh grafik.","Scroll horizontally to view the complete chart.")}</p></figure>;
+    })}</div>
     <p className="bt-note">{t("Sumber: laporan MT5 Strategy Tester yang diimpor. Grafik menunjukkan saldo, bukan floating equity. Drawdown memakai angka penurunan ekuitas relatif maksimum dari laporan MT5. Hasil simulasi bukan hasil akun real dan tidak menjamin performa masa depan.","Source: imported MT5 Strategy Tester report. The chart shows balance, not floating equity. Drawdown is the maximum relative equity drawdown reported by MT5. Simulated results are not live account results and do not guarantee future performance.")}</p>
   </section>;
 }

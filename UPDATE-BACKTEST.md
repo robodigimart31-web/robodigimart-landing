@@ -1,4 +1,4 @@
-﻿# Memperbarui backtest HELIX
+# Memperbarui backtest HELIX
 
 Website menampilkan satu laporan backtest aktif. Impor mengganti laporan secara utuh; tidak menggabungkan atau menjumlahkan dua pengujian.
 
@@ -27,3 +27,11 @@ Importer mendukung laporan HTML MT5 berbahasa Inggris, UTF-8 atau UTF-16LE, EA H
 - Bulanan: selisih saldo akhir bulan dengan bulan sebelumnya; bulan pertama memakai modal awal. Delapan bulan terakhir ditampilkan, bulan terakhir dapat belum lengkap.
 - Filter grafik tidak menghitung ulang statistik seluruh pengujian.
 - Laporan mentah tetap lokal; riwayat JSON yang telah diterbitkan tersedia melalui Git.
+
+
+## Gambar grafik tambahan pada halaman produk
+Simpan HTML beserta PNG pendamping dari MT5 dalam folder yang sama. Importer otomatis mengambil gambar berakhiran -hst.png (distribusi), -mfemae.png (korelasi), dan -holding.png (durasi posisi). Grafik garis saldo PNG tidak diimpor karena sudah digambar dari data saldo.
+
+Gambar dipublikasikan persis dari laporan sumber, dengan nama file berbasis hash agar cache tidak menampilkan versi lama. Jika laporan baru tidak membawa PNG, bagian grafik tambahan disembunyikan; gambar laporan sebelumnya tidak dipakai untuk laporan baru.
+
+Sumber gambar laporan aktif telah diverifikasi melalui kesamaan SHA-256 file HTML dengan laporan asli yang diberikan. Gambar PNG dipertahankan persis seperti ekspor MT5, termasuk latar putih dan label bawaan yang pucat. Judul dan keterangan HTML bilingual ditambahkan di luar gambar agar konteks analisis terbaca. Pada ponsel, grafik dapat digeser horizontal tanpa mengecilkan teks sampai tidak terbaca.

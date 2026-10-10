@@ -1,4 +1,7 @@
-import { readFile, writeFile, rename } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import sharp from 'sharp';
 import { pathToFileURL } from 'node:url';
 
 const clean = s => s.replace(/<[^>]*>/g, '').replace(/&nbsp;|&#160;/g, ' ').replace(/&amp;/g, '&').trim();
@@ -57,6 +60,25 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const bytes = await readFile(process.argv[2]);
   const html = bytes.toString(bytes[0] === 255 && bytes[1] === 254 ? 'utf16le' : 'utf8');
   const data = parseReport(html);
+  // Import only the supplementary charts belonging to this report. Never reuse
+  // charts from an older test when a new HTML report arrives without its PNGs.
+  const reportPath = path.resolve(process.argv[2]);
+  const stem = path.basename(reportPath, path.extname(reportPath));
+  const diagnostics = {};
+  for (const [key, suffix] of [['distribution','hst'],['correlation','mfemae'],['holding','holding']]) {
+    const imagePath = path.join(path.dirname(reportPath), `${stem}-${suffix}.png`);
+    let bytes;
+    try { bytes = await readFile(imagePath); } catch(error) { if(error.code === 'ENOENT') continue; throw error; }
+    const meta = await sharp(bytes).metadata();
+    if(meta.format !== 'png' || !meta.width || !meta.height) throw new Error('Invalid report chart PNG');
+    const hash = createHash('sha256').update(bytes).digest('hex').slice(0,12);
+    const filename = `quadriga-${suffix}-${hash}.png`;
+    const folder = new URL('../public/images/backtest/', import.meta.url);
+    await mkdir(folder,{recursive:true});
+    await writeFile(new URL(filename,folder),bytes);
+    diagnostics[key] = {src:`/images/backtest/${filename}`,width:meta.width,height:meta.height};
+  }
+  data.diagnostics = diagnostics;
   const target = new URL('../lib/backtest-data.json', import.meta.url);
   const temp = new URL('../lib/backtest-data.json.tmp', import.meta.url);
   await writeFile(temp, JSON.stringify(data, null, 2) + '\n');
