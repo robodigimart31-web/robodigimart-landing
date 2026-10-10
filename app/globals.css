@@ -426,7 +426,7 @@ body{font-family:"Segoe UI",sans-serif;background:#050607}
 /* Seamless atmosphere, local Manrope typography, and bilingual navigation. */
 body{font-family:var(--font-manrope),sans-serif;background:#0b0c0e;color:#eeefed;line-height:1.6}
 body::before{opacity:.08;z-index:0}
-.ambient-gold{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:url('/images/gold-atmosphere.svg'),radial-gradient(ellipse at 4% 24%,#8e60231c,transparent 45%),radial-gradient(ellipse at 96% 74%,#bd8a3420,transparent 42%);background-position:center top;background-size:1600px 1200px,100% 100%,100% 100%;background-repeat:repeat-y,no-repeat,no-repeat}
+.ambient-gold{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:url('/images/trading-atmosphere-v2.svg'),radial-gradient(ellipse at 4% 24%,#8e60231c,transparent 45%),radial-gradient(ellipse at 96% 74%,#bd8a3420,transparent 42%);background-position:center top;background-size:1600px 1200px,100% 100%,100% 100%;background-repeat:repeat-y,no-repeat,no-repeat}
 .site-surface{position:relative;z-index:1;overflow:clip}
 h1,h2,h3,h4{font-family:var(--font-manrope),sans-serif;font-weight:600;letter-spacing:-.035em}
 button,input,select{font:inherit}
@@ -505,3 +505,20 @@ main>section:not(.mockup-hero)::before{content:"";position:absolute;pointer-even
 @media(max-width:850px) and (min-width:761px){.header-contact{display:none}.nav-links{gap:16px}}
 @media(max-width:760px){.site-header{background:#0b0d10ed}.nav-links{background:#11161af5;border:0;box-shadow:0 18px 25px #0003}.nav-links>a{font-size:14px;border-color:#ffffff08}.language-switch{padding:3px}.language-switch a{min-width:31px;height:28px}.section{padding:36px 0}.section-header h2{font-size:25px}.mockup-hero{padding-bottom:0}.mockup-hero-inner{min-height:730px;padding-top:38px}.mockup-hero h1{font-size:clamp(28px,6vw,40px);line-height:1.22}.mockup-hero h2{font-size:17px}.mockup-hero-copy>p{font-size:13px}.mockup-hero:after{background:linear-gradient(180deg,#0b0c0e 0%,#0b0c0e 36%,transparent 67%)}.hero-scene{mask-image:linear-gradient(180deg,transparent,black 22%,black 75%,transparent);-webkit-mask-image:linear-gradient(180deg,transparent,black 22%,black 75%,transparent)}.hero-proof span{max-width:125px}.mockup-hero .hero-proof{gap:14px}.mockup-why{padding-bottom:220px}.mockup-why:after{background:linear-gradient(180deg,#0b0c0e22,transparent)}.mockup-why .why-card{min-height:185px}.quadriga-card{border:0}.mockup-cta{padding:36px 0}.ambient-gold{background-size:1000px 900px,100% 100%,100% 100%;opacity:.85}.detail-grid h1{font-size:42px}.detail-grid h2{font-size:20px}}
 @media(max-width:480px){.header-contact{display:none!important}.nav-inner{gap:8px}.nav-actions{gap:8px}.brand{min-width:0}.brand b{font-size:23px}.brand img{width:35px;height:47px}.brand small{font-size:5px}.mockup-hero-inner{min-height:795px}.mockup-hero h1{font-size:clamp(25px,6.3vw,30px)}.mockup-hero:after{background:linear-gradient(180deg,#0b0c0e 0%,#0b0c0e 46%,transparent 72%)}.hero-proof{display:grid;grid-template-columns:1fr 1fr}.hero-proof span{max-width:none}.hero-motto{font-size:10px;right:0}.quadriga-copy{padding:20px}.quadriga-copy h3{font-size:24px}.quadriga-card{min-height:480px}.mountain-motto{font-size:10px}.section-header h2{font-size:23px}.step h3{font-size:13px}}
+
+/* Trading engine atmosphere: quiet circuitry and signal flow, no lightning. */
+body{background:#090c10}
+.ambient-gold{background-image:url('/images/trading-atmosphere-v2.svg'),radial-gradient(ellipse at 0% 35%,#b4883920,transparent 48%),radial-gradient(ellipse at 100% 75%,#aa74201c,transparent 46%);background-size:1600px 1400px,100% 100%,100% 100%;background-position:center top;background-repeat:repeat-y,no-repeat,no-repeat;opacity:1}
+.mockup-product{background:linear-gradient(120deg,#11171ce8,#0d1319f0);border-color:#c7a46030}
+.quadriga-card{min-height:540px}
+.quadriga-card>img{object-position:center top;object-fit:contain;height:auto;min-height:0}
+.quadriga-card:after{background:linear-gradient(0deg,#0b0e12 0%,#0b0e12f5 21%,#0b0e12a6 34%,transparent 53%)}
+.quadriga-copy{background:none;padding:28px}
+.detail-art img{mix-blend-mode:normal;border:0;mask-image:radial-gradient(ellipse at center,black 48%,transparent 76%);-webkit-mask-image:radial-gradient(ellipse at center,black 48%,transparent 76%)}
+.mockup-why{overflow:visible;background:transparent;isolation:isolate}
+.mockup-why:after{background:none}
+.mountain-scene{width:78%;height:calc(100% + 100px);max-width:none;inset:-50px 0 auto auto;object-fit:cover;object-position:right center;opacity:.84;mask-image:radial-gradient(ellipse 64% 56% at 72% 50%,#000 20%,#000b 52%,transparent 88%);-webkit-mask-image:radial-gradient(ellipse 64% 56% at 72% 50%,#000 20%,#000b 52%,transparent 88%)}
+@media(min-width:1600px){.quadriga-card{min-height:580px}}
+@media(max-width:1100px) and (min-width:761px){.quadriga-card{min-height:525px}.quadriga-copy{padding:24px}}
+@media(max-width:760px){.ambient-gold{background-size:1050px 1000px,100% 100%,100% 100%;opacity:.8}.quadriga-card{min-height:570px}.quadriga-card>img{width:100%;height:auto}.mountain-scene{width:100%;height:380px;inset:auto 0 -40px auto;object-position:72% center;mask-image:radial-gradient(ellipse 70% 54% at 70% 50%,black 15%,#000b 48%,transparent 88%);-webkit-mask-image:radial-gradient(ellipse 70% 54% at 70% 50%,black 15%,#000b 48%,transparent 88%)}.quadriga-copy{padding:24px}.mockup-why{padding-bottom:240px}}
+@media(max-width:480px){.quadriga-card{min-height:495px}.quadriga-copy{padding:22px}.quadriga-card:after{background:linear-gradient(0deg,#0b0e12 0%,#0b0e12 34%,#0b0e1290 49%,transparent 63%)}}

@@ -50,8 +50,7 @@ await writeFile(layout, `export const dynamicParams = false;\n${await readFile(l
 
 const optimized = path.join(stage, "public", "images", "optimized");
 await mkdir(optimized, { recursive: true });
-for (const scene of ["hero", "quadriga", "mountain"]) {
-  const name = `helix-${scene}-scene`;
+for (const name of ["helix-hero-scene", "helix-quadriga-v2", "helix-mountain-scene"]) {
   for (const width of [640, 960, 1280, 1920]) {
     await sharp(path.join(root, "public", "images", `${name}.png`))
       .resize({ width, withoutEnlargement: true }).webp({ quality: 82 })
