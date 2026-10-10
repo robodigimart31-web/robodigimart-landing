@@ -1,23 +1,34 @@
-# HELIX VIP backend setup
+# HELIX VIP portal
 
-The first portal deployment is a safe UI prototype. The production license flow is prepared in `supabase/license-schema.sql`.
+The VIP pages are static Cloudflare Pages assets with server operations in `functions/vip/api/[[path]].js`. The browser uses the Supabase publishable key only. The Pages Function validates the Supabase access token, reads the member role from `helix_members`, and uses `SUPABASE_SERVICE_ROLE_KEY` only on the server for invitations and protected database operations.
 
-## What the migration provides
+## Supabase tables
 
-- `helix_members`: member/admin identity linked to Supabase Auth.
-- `helix_licenses`: hashed license key, product, expiry, status, and account limit.
-- `helix_license_bindings`: broker/server + account fingerprint bindings and slot release.
-- `helix_license_events`: activation, sync, reset, suspend, revoke, and email audit trail.
-- `helix_announcements` and `helix_materials`: content controlled by admin.
-- `helix_touch_binding(...)`: an atomic, locked activation/sync function that prevents double slot allocation.
+Run these SQL files in order in Supabase SQL Editor:
 
-## One-time configuration still required
+1. `supabase/schema.sql`
+2. `supabase/license-schema.sql`
+3. `supabase/license-policies.sql`
+4. `supabase/auth-trigger.sql`
+5. `supabase/role-rpc.sql`
 
-1. Create or open the Supabase project.
-2. Run `schema.sql`, then `license-schema.sql`, then `license-policies.sql`, then `auth-trigger.sql` in the SQL Editor.
-3. Enable email/password Auth (and configure production SMTP before inviting customers).
-4. Add the Supabase URL and server-only service-role key as deployment secrets. Never put the service-role key in `public/vip` or browser JavaScript.
-5. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from `.env.example` to the public build environment. Add `SUPABASE_SERVICE_ROLE_KEY` only as a server-side deployment secret.
-6. Confirm the License API contract used by the EA: product slug, license credential, broker server, login, pairing code, seven-day sync, grace period, and reset cooldown.
+The invite trigger creates a `helix_members` row with the `member` role. Promote administrators through a trusted SQL editor only.
 
-The static portal currently shows demo data by design. The next implementation replaces its demo state with authenticated server routes, then connects the EA to the same license service. A portal button alone cannot activate an EX5 until that server contract and EA validation endpoint are implemented.
+## Cloudflare Pages
+
+The production Pages project must have the runtime secret `SUPABASE_SERVICE_ROLE_KEY` configured under Settings → Variables and Secrets. This secret is already present on the connected `helix-website` production project. Do not expose it as a `NEXT_PUBLIC_*` variable or commit it to the repository. Pages Functions are deployed from the repository's root `functions/` directory alongside the static output in `cloudflare-dist/`.
+
+The account invitation and password reset emails are sent by Supabase Auth. Configure a production SMTP provider and allow these callback URLs in Supabase Auth URL Configuration:
+
+- `https://www.robodigimart.com/vip/login?flow=invite`
+- `https://www.robodigimart.com/vip/login?flow=recovery`
+
+Member sign-up remains disabled. Admin invitations allow each member to set their own password from the invitation link.
+
+## Operational scope
+
+The live portal supports member invitations, reset links, account suspension, license creation and key rotation, entitlement status/expiry/slot changes, binding release, announcements, materials, and member read-only views. License keys are stored as SHA-256 hashes and shown to an admin only at creation or rotation.
+
+The MT5 account-pairing handshake still requires the HELIX EA to call a production License API. The website must not invent a pairing code or mark a terminal active by itself. The current pages show server-confirmed account bindings and let the member/admin release a binding safely; they do not claim that the EA pairing API is live.
+
+Material rows support HTTPS links. To host private downloadable files, configure a Supabase Storage bucket and signed upload/download routes before placing private file links here.
