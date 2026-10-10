@@ -27,12 +27,12 @@ function filteredPoints(points: PerformancePoint[], range: Range) {
   cutoff.setUTCMonth(cutoff.getUTCMonth() - ({ "1M": 1, "3M": 3, "6M": 6 }[range]));
   return points.filter(p => new Date(p.recorded_at) >= cutoff);
 }
-function EquityChart({ points, balance = false }: {points: PerformancePoint[];balance?:boolean}) {
+function EquityChart({ points, balance = false, profit = false }: {points: PerformancePoint[];balance?:boolean;profit?:boolean}) {
  const {t} = useCopy();
  const gradId = useId();
   if (points.length < 2) return <EmptyCurve/>;
   const width = 780, height = 250, margin = 26;
-  const value = (p: PerformancePoint) => balance ? p.balance : p.equity!;
+  const value = (p: PerformancePoint) => profit ? p.profit! : balance ? p.balance! : p.equity!;
   const values = points.map(value);
   const min = Math.min(...values), max = Math.max(...values);
   const pad = Math.max((max - min) * 0.18, Math.abs(max) * 0.01, 1);
@@ -43,7 +43,7 @@ function EquityChart({ points, balance = false }: {points: PerformancePoint[];ba
   const y = (v: number) => height - margin - ((v-lo)/(hi-lo)) * (height - 2*margin);
   const line = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(value(p)).toFixed(1)}`).join(" ");
   const fill = `${line} L ${x(points.length-1)} ${height-margin} L ${margin} ${height-margin} Z`;
-  return <svg className="equity-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t(balance ? "Historical account balance chart" : "Historical account equity chart")}>
+  return <svg className="equity-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t(profit ? "Cumulative HELIX profit chart" : balance ? "Historical account balance chart" : "Historical account equity chart")}>
     <defs><linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#d7a448" stopOpacity=".35"/><stop offset="100%" stopColor="#d7a448" stopOpacity="0"/></linearGradient></defs>
     {[0,1,2,3,4].map(n => <line key={n} x1={margin} x2={width-margin} y1={margin+n*(height-2*margin)/4} y2={margin+n*(height-2*margin)/4} stroke="#bfa774" strokeOpacity=".13" strokeDasharray="3 7"/>)}
     <path d={fill} fill={`url(#${gradId})`}/><path d={line} fill="none" stroke="#f8c469" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round"/>
@@ -52,7 +52,7 @@ function EquityChart({ points, balance = false }: {points: PerformancePoint[];ba
 }
 function EmptyCurve() {
  const {t}=useCopy();
-  return <div className="empty-curve"><Icon name="chart" size={30}/><strong>{t("Awaiting performance history")}</strong><span>{t("Equity curve will appear after data is connected.")}</span></div>;
+  return <div className="empty-curve"><Icon name="chart" size={30}/><strong>{t("Awaiting performance history")}</strong><span>{t("The chart appears when performance data is available.")}</span></div>;
 }
 function MonthlyBars({points, currency, balance = false, monthly}: {points: PerformancePoint[];currency: string;balance?:boolean;monthly?:{month:string;change:number}[]}) {
  const {t,locale}=useCopy();
@@ -81,11 +81,11 @@ function MonthlyBars({points, currency, balance = false, monthly}: {points: Perf
 function DataCard({kind, dataset, range, setRange, loading, failed}: {kind:"live"|"backtest";dataset:PerformanceDataset|null;range:Range;setRange:(range:Range)=>void;loading:boolean;failed:boolean}) {
   const {t,locale}=useCopy();
   const isLive = kind === "live";
+  if (isLive && dataset?.scope !== "helix_magic_681") dataset = null;
   const report = dataset?.report;
-  const [liveCurve, setLiveCurve] = useState<"balance"|"equity">("balance");
-  const balance = isLive ? liveCurve === "balance" : dataset?.chart_basis === "balance";
-  const sourcePoints = isLive && balance ? dataset?.balance_points ?? [] : dataset?.points ?? [];
-  const points = filteredPoints(sourcePoints.filter(p => balance || p.equity !== null), range);
+  const balance = !isLive && dataset?.chart_basis === "balance";
+  const sourcePoints = dataset?.points ?? [];
+  const points = filteredPoints(sourcePoints.filter(p => isLive ? Number.isFinite(p.profit) : balance ? p.balance !== null : p.equity !== null), range);
   const isStale = isLive && report ? (Date.now() - new Date(report.updated_at).getTime()) > 15*3600*1000 : false;
   const currency = report?.currency || "USD";
   return <article className={`performance-card ${isLive ? "live-card" : "test-card"}`}>
@@ -100,16 +100,15 @@ function DataCard({kind, dataset, range, setRange, loading, failed}: {kind:"live
         <div className="metric"><label>{t("Net Profit")}</label><strong>{money(report?.net_profit ?? null, currency,locale)}</strong></div>
         <div className="metric"><label>{t("Win Rate")}</label><strong>{report?.win_rate == null ? "—" : `${num(report.win_rate,locale,1)}%`}</strong></div>
         <div className="metric"><label>{t("Profit Factor")}</label><strong>{num(report?.profit_factor ?? null,locale)}</strong></div>
-        <div className="metric"><label>{isLive ? t("Snapshot DD*") : t(balance ? "Max Equity DD (relative)" : "Max Drawdown")}</label><strong>{report?.max_drawdown_pct == null ? "—" : `${num(report.max_drawdown_pct,locale,2)}%`}</strong></div>
+        <div className="metric"><label>{t(isLive ? "Closed Positions" : balance ? "Max Equity DD (relative)" : "Max Drawdown")}</label><strong>{isLive ? (report?.total_trades?.toLocaleString(languageTag(locale)) ?? "-") : report?.max_drawdown_pct == null ? "-" : `${num(report.max_drawdown_pct,locale,2)}%`}</strong></div>
       </div>
-      {isLive && report && <div className="chart-ranges" role="group" aria-label={t("Chart type")}><button aria-pressed={liveCurve === "balance"} className={liveCurve === "balance" ? "selected" : ""} onClick={()=>setLiveCurve("balance")}>{t("Balance")}</button><button aria-pressed={liveCurve === "equity"} className={liveCurve === "equity" ? "selected" : ""} onClick={()=>setLiveCurve("equity")}>{t("Equity")}</button></div>}
-      <div className="chart-head"><h4>{t(balance ? "Balance Curve (daily close)" : "Equity Curve")}</h4><div className="chart-ranges" role="group" aria-label={`${t("Range")} ${t(isLive ? "Real Account Performance" : "Backtest Performance")}`}>{ranges.map(r=><button aria-pressed={range===r} onClick={()=>setRange(r)} className={range===r ? "selected" : ""} key={r}>{locale === "id" ? ({"1M":"1B","3M":"3B","6M":"6B","ALL":"SEMUA"}[r]) : r}</button>)}</div></div>
-      {failed ? <div className="empty-curve">{t("Performance data is temporarily unavailable.")}</div> : <EquityChart points={points} balance={balance}/>}
+      <div className="chart-head"><h4>{t(isLive ? "Cumulative Net Profit" : balance ? "Balance Curve (daily close)" : "Equity Curve")}</h4><div className="chart-ranges" role="group" aria-label={`${t("Range")} ${t(isLive ? "Real Account Performance" : "Backtest Performance")}`}>{ranges.map(r=><button aria-pressed={range===r} onClick={()=>setRange(r)} className={range===r ? "selected" : ""} key={r}>{locale === "id" ? ({"1M":"1B","3M":"3B","6M":"6B","ALL":"SEMUA"}[r]) : r}</button>)}</div></div>
+      {failed ? <div className="empty-curve">{t("Performance data is temporarily unavailable.")}</div> : <EquityChart points={points} balance={balance} profit={isLive}/>}
       {points.length >= 2 && <div className="chart-dates"><span>{dateString(points[0].recorded_at,locale)}</span><span>{dateString(points[points.length-1].recorded_at,locale)}</span></div>}
-      <div className="p-bottom"><div><h4>{t("Monthly P/L")}</h4><MonthlyBars points={dataset?.points || []} currency={currency} balance={balance} monthly={dataset?.monthly}/></div><div className="account-facts"><h4>{t("Trading Information")}</h4><dl><dt>{t("Account")}</dt><dd>{(report?.account_type === "backtest" ? t("BACKTEST") : report?.account_type.toUpperCase()) || "—"}</dd><dt>{t("Initial Deposit")}</dt><dd>{money(report?.initial_balance ?? null,currency,locale)}</dd><dt>{t("Symbol")}</dt><dd>{report?.symbol || "—"}</dd><dt>{t(isLive ? "Closed Positions" : "Total Trades")}</dt><dd>{report?.total_trades?.toLocaleString(languageTag(locale)) ?? "—"}</dd><dt>{t("Period")}</dt><dd>{report?.period_start ? `${dateString(report.period_start,locale)} - ${report.period_end ? dateString(report.period_end,locale) : ""}` : "—"}</dd></dl></div></div>
+      <div className="p-bottom"><div><h4>{t("Monthly P/L")}</h4><MonthlyBars points={dataset?.points || []} currency={currency} balance={balance} monthly={dataset?.monthly}/></div><div className="account-facts"><h4>{t("Trading Information")}</h4><dl><dt>{t("Account")}</dt><dd>{(report?.account_type === "backtest" ? t("BACKTEST") : report?.account_type.toUpperCase()) || "—"}</dd>{!isLive && <><dt>{t("Initial Deposit")}</dt><dd>{money(report?.initial_balance ?? null,currency,locale)}</dd></>}<dt>{t("Symbol")}</dt><dd>{report?.symbol || "—"}</dd><dt>{t(isLive ? "Closed Positions" : "Total Trades")}</dt><dd>{report?.total_trades?.toLocaleString(languageTag(locale)) ?? "—"}</dd><dt>{t("Period")}</dt><dd>{report?.period_start ? `${dateString(report.period_start,locale)} - ${report.period_end ? dateString(report.period_end,locale) : ""}` : "—"}</dd></dl></div></div>
       {balance && !isLive && <p className="card-disclaimer">{t("Balance excludes floating P/L. Drawdown is MT5 relative equity drawdown; monthly figures are balance changes. Metrics cover the full test period.")} {dataset?.timeframe} / {dataset?.history_quality}</p>}
-      {isLive && report && <p className="card-disclaimer">{t("History uses broker time. Net profit excludes deposits and withdrawals. Win rate and profit factor use fully closed positions, including entry and exit costs. Equity starts when monitoring connects; snapshot drawdown is unavailable across cash-flow changes.")}</p>}
-      <p className="card-disclaimer"><Icon name="info" size={14}/>{isLive ? t("*Drawdown from periodic snapshots may miss intraday peaks. Results are self-reported by the connected MT5 terminal, not independently verified.") : t("Backtests are simulations, not actual executions, and do not guarantee future performance.")}</p>
+      {isLive && report && <p className="card-disclaimer">{t("Only HELIX positions opened with magic 681000-681999 are included. Net profit includes attached commission, swap and fees; excludes deposits, withdrawals, other positions and floating P/L. History uses broker time.")}</p>}
+      <p className="card-disclaimer"><Icon name="info" size={14}/>{isLive ? t("Results are self-reported by the connected MT5 terminal, not independently verified.") : t("Backtests are simulations, not actual executions, and do not guarantee future performance.")}</p>
     </div>
   </article>;
 }

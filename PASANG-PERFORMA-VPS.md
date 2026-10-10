@@ -1,46 +1,47 @@
-# Hubungkan akun real HELIX dari VPS
+# Publisher V3: profit HELIX saja
 
-Paket privat tersedia di artifacts/HELIX-VPS-PUBLISHER.zip. Jangan unggah paket atau file .set ke GitHub/website/chat publik: file .set berisi kunci pengiriman statistik. Password trading dan password VPS tidak diperlukan.
+Paket privat: artifacts/HELIX-VPS-PUBLISHER-V3.zip. File .set berisi kunci pengiriman; jangan dibagikan atau diunggah ke repository publik.
 
-## Pasang sekali di VPS Windows
+## Mengganti V2 yang sudah terpasang di VPS
 
-1. Salin ZIP ke VPS dan ekstrak.
-2. Buka MT5 pada akun REAL khusus HELIX QUADRIGA. Di File > Open Data Folder, buka MQL5 > Experts. Salin HELIX_PERFORMANCE_PUBLISHER_V2.ex5 ke folder tersebut.
-3. Di MT5 buka Tools > Options > Expert Advisors. Aktifkan Allow WebRequest for listed URL dan tambahkan:
-   https://helix-performance.robo-digimart31.workers.dev
-4. Buka chart BARU untuk simbol HELIX yang digunakan broker, misalnya XAUUSDm. Jangan mengganti EA trading di chart yang sudah berjalan.
-5. Di Navigator > Expert Advisors, klik kanan Refresh. Tarik HELIX_PERFORMANCE_PUBLISHER_V2 ke chart baru.
-6. Pada Inputs, klik Load, pilih HELIX-VPS-PRIVATE.set dari folder hasil ekstrak. Pastikan InpHistoryFrom tetap 2026.10.04 00:00:00 dan InpSyncHours 12, lalu OK. Tidak perlu mengubah pengaturan Algo Trading milik EA trading. Publisher tidak menggunakan fungsi transaksi atau DLL.
-7. Buka Toolbox > Experts. Tanda berhasil: HELIX Publisher V2: sync OK. Perbarui halaman website; cache data maksimal 60 detik. Pengiriman berikutnya otomatis setiap 12 jam selama MT5 di VPS tersambung.
+1. Salin ZIP V3 ke VPS dan ekstrak.
+2. Pada chart PUBLISHER, hapus HELIX_PERFORMANCE_PUBLISHER_V2 dari chart. Jangan menghapus atau mengganti EA HELIX QUADRIGA yang melakukan trading pada chart lain.
+3. MT5 > File > Open Data Folder > MQL5 > Experts: salin HELIX_PERFORMANCE_PUBLISHER_V3.ex5.
+4. Navigator > Expert Advisors > klik kanan Refresh. Pasang HELIX_PERFORMANCE_PUBLISHER_V3 pada chart publisher tadi, dengan simbol HELIX yang digunakan broker.
+5. Inputs > Load > pilih HELIX-VPS-V3-PRIVATE.set. Tanggal bawaan tetap 2026.10.04 00:00:00 (waktu broker), interval 12 jam. Klik OK.
+6. URL WebRequest tetap sama: https://helix-performance.robo-digimart31.workers.dev . Tidak perlu menambahkan URL baru. Publisher tidak memerlukan izin Algo Trading dan tidak melakukan transaksi; biarkan pengaturan Algo Trading EA trading sebagaimana sebelumnya.
+7. Tab Experts harus menampilkan HELIX Publisher V3: sync OK. Riwayat sejak 4 Oktober otomatis dikirim ulang dengan filter baru. Refresh website; cache maksimal 60 detik.
 
-Terminal tidak perlu direstart. Paket EX5 sudah dikompilasi dengan 0 error dan 0 warning di komputer pengembangan. Jika MT5 VPS mengatakan versi EX5 tidak didukung, gunakan file MQ5 pendamping, buka di MetaEditor VPS dan Compile (F7); jangan menutup chart trading.
+V3 memakai penjadwalan baru agar mengirim segera setelah dipasang, tidak menunggu jadwal 12 jam V2. Jika server menjawab 429 karena pembaruan sebelumnya kurang dari lima menit, publisher mencoba kembali setelah 30 menit. Laptop pribadi boleh mati; MT5 VPS perlu tetap berjalan dan tersambung.
 
-## Yang dilaporkan
+## Aturan statistik
 
-- Semua transaksi dalam akun khusus HELIX, mulai 4 Oktober 2026 00.00 waktu broker; bukan WIB. Tidak ada posisi bawaan, sesuai konfirmasi pemilik akun.
-- Saldo awal dihitung dari saldo saat ini dikurangi perubahan saldo dalam riwayat periode tersebut. Pastikan broker menyediakan riwayat lengkap. Jika baru deposit setelah tanggal mulai, saldo awal bisa nol.
-- Laba bersih dan laba bulanan mengecualikan deposit/penarikan. Biaya, komisi, swap dan fee disertakan. Kredit/bonus/koreksi broker tertentu ditolak untuk pemeriksaan manual.
-- Win rate, profit factor, dan jumlah posisi selesai dihitung untuk posisi yang ditutup penuh, termasuk biaya masuk/keluar. Partial close belum dihitung sebagai satu posisi selesai sampai sisanya ditutup. Laba yang sudah direalisasi tetap masuk net profit.
-- Grafik Saldo berasal dari riwayat akhir hari menurut tanggal broker. Grafik Ekuitas berasal dari snapshot UTC sejak publisher terhubung. Tidak ada equity historis yang dibuat-buat.
-- Drawdown snapshot hanya tampil setelah minimal dua snapshot dan tanpa perubahan arus dana dalam rentang snapshot. Bukan drawdown intrahari sejak 4 Oktober. Jika arus dana berubah, angka dibiarkan kosong agar tidak salah dianggap sebagai kerugian trading.
-- Statistik adalah laporan terminal pemilik akun, bukan verifikasi broker independen.
+- Hanya posisi yang dibuka dengan magic 681000 sampai 681999 (inklusif).
+- Posisi HELIX yang ditutup manual tetap dihitung, berdasarkan position ID. Posisi yang sejak awal dibuka manual atau EA lain tidak dihitung dan tidak dikirim oleh publisher.
+- Pada akun netting, penambahan/reversal manual atau EA lain dalam position ID yang sama dengan HELIX tidak bisa dipisahkan dengan andal. Pengiriman ditolak untuk pemeriksaan, bukan diam-diam dicampur.
+- Deposit, penarikan, balance, equity, kredit akun dan modal awal tidak dikirim. Operasi non-trading tidak masuk profit.
+- Profit kumulatif mulai nol pada 4 Oktober 2026 00.00 waktu broker. Nilainya berasal dari profit terealisasi + komisi + swap + fee yang melekat pada deal posisi HELIX. Biaya akun terpisah yang tidak dapat diatribusikan ke posisi tidak disertakan.
+- Biaya entry dicatat saat terjadi; profit partial close masuk profit, tetapi posisi baru masuk hitungan win rate/profit factor/jumlah posisi selesai setelah ditutup penuh.
+- Profit bulanan menggunakan aturan yang sama, tanpa perubahan akibat deposit/WD. Floating P/L tidak dihitung.
+- Mata uang tetap mengikuti akun, termasuk USC untuk akun cent; tidak dikonversi diam-diam ke USD.
+- Modal awal, menu Balance/Equity, dan drawdown equity dihapus dari kartu akun real. Kartu backtest mempertahankan modal dan drawdown dari laporan pengujiannya.
+- Statistik seluruh periode tidak dihitung ulang saat filter rentang grafik diubah.
 
-## Jika belum tersambung
+## Transisi dan pemeriksaan
 
-- HTTP -1 / error 4014: cek URL WebRequest dan pemasangan sebagai EA di chart normal, bukan Strategy Tester.
-- HTTP 401: muat ulang file .set privat yang disediakan.
-- HTTP 409: akun sudah terkunci ke akun pertama atau snapshot duplikat. Jangan mengganti akun pada publisher.
-- HTTP 422: baca pesan ringkas pada Experts; dapat disebabkan jam Windows VPS tidak benar, riwayat tidak lengkap, kredit broker, atau tanggal tidak sesuai.
-- HTTP 429: pembaruan terlalu cepat, tunggu jadwal ulang.
-- Gagal koneksi: publisher mencoba lagi setiap 30 menit. MT5 harus tetap berjalan di VPS; laptop pribadi boleh dimatikan.
+Backend V3 menolak publisher V2 yang tidak membawa magic. Data V2 tidak ditampilkan sebagai data berfilter; website menunggu pengiriman V3 pertama. Kunci dan penguncian akun tetap sama. Data agregat V2 lama tidak cukup untuk dihitung ulang karena raw deals tidak disimpan; V3 harus membaca ulang riwayat MT5.
 
-## Catatan pengembang
+Pengujian: node --test performance-worker/metrics.test.mjs. Meliputi batas magic, transaksi manual, penutupan manual HELIX, deposit/WD, biaya, partial close, posisi campuran dan format lama. Paket EX5 dikompilasi dengan 0 error/0 warning. MQ5 pendamping dapat dikompilasi ulang di MetaEditor VPS jika versi terminal lebih lama menolak EX5.
 
-Backend terpisah: performance-worker/worker.mjs + Cloudflare D1 helix-performance. Website Pages tetap statis, membaca endpoint publik /api/performance lewat HTTPS. Kunci hanya berada di Worker secrets dan file .set privat, tidak di frontend atau repository.
+- HTTP 401: muat file .set yang diberikan.
+- HTTP 409: akun berbeda atau timestamp duplikat; jangan mengganti akun yang terhubung.
+- HTTP 422: lihat pesan pada Experts; bisa berarti V2 lama, posisi campuran, riwayat entry tidak lengkap, atau jam VPS keliru.
+- HTTP -1/error 4014: periksa izin WebRequest dan URL. Pasang pada chart normal, bukan Strategy Tester.
 
-POST /api/publisher/mt5 memerlukan Bearer key. Akun dikunci atomik pada hash akun/server pertama yang berhasil, dengan salt privat. Payload maksimum 3 MB/15.000 deal, batas tanggal tetap, validasi jam, penolakan duplikat dan jeda minimal lima menit. Raw deal diproses tetapi tidak disimpan di D1; hanya ringkasan publik, saldo harian, snapshot dan hash akun yang disimpan. Nomor akun/tiket/position ID tidak diekspos endpoint publik.
+## Backend
 
-Uji: node --test performance-worker/metrics.test.mjs. Deploy backend: npx wrangler deploy --config performance-worker/wrangler.jsonc. Deployment website melalui branch cloudflare-landing. File .dev.vars dan artifacts diabaikan Git. Izin Cloudflare ditambah atas otorisasi pemilik.
+Worker helix-performance dan D1 helix-performance. POST /api/publisher/mt5 menggunakan Bearer key dan account hash dengan salt privat; GET /api/performance hanya mengeluarkan agregat profit yang lolos filter. V3 tidak lagi membaca/menulis tabel snapshots lama. Riwayat snapshot lama tidak ditampilkan; tidak ada penghapusan database yang diperlukan untuk upgrade.
 
-Panduan resmi input Load: https://www.metatrader5.com/en/terminal/help/algotrading/trade_robots_indicators
-Panduan WebRequest: https://www.mql5.com/en/docs/network/webrequest
+Deploy backend: npx wrangler deploy --config performance-worker/wrangler.jsonc . Deploy frontend melalui branch cloudflare-landing. Folder artifacts dan .dev.vars diabaikan Git. Kunci tidak dimasukkan ke source EX5/MQ5 maupun frontend.
+
+Referensi properti magic dan position ID: https://www.mql5.com/en/docs/constants/tradingconstants/dealproperties

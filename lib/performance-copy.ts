@@ -1,4 +1,9 @@
 export const performanceId = {
+  "Cumulative HELIX profit chart": "Grafik profit kumulatif HELIX",
+  "Cumulative Net Profit": "Profit Bersih Kumulatif",
+  "The chart appears when performance data is available.": "Grafik tampil setelah data performa tersedia.",
+  "Only HELIX positions opened with magic 681000-681999 are included. Net profit includes attached commission, swap and fees; excludes deposits, withdrawals, other positions and floating P/L. History uses broker time.": "Hanya posisi HELIX yang dibuka dengan magic 681000-681999 yang dihitung. Profit bersih mencakup komisi, swap dan biaya yang tercatat pada transaksi; tidak mencakup deposit, penarikan, posisi lain, atau laba/rugi mengambang. Riwayat memakai waktu broker.",
+  "Results are self-reported by the connected MT5 terminal, not independently verified.": "Hasil dilaporkan oleh terminal MT5 yang terhubung, bukan verifikasi independen.",
   "Chart type": "Jenis grafik",
   "Balance": "Saldo",
   "Equity": "Ekuitas",

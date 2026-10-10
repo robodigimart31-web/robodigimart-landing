@@ -19,10 +19,12 @@ export interface PerformanceReport {
 }
 export interface PerformancePoint {
   recorded_at: string;
-  balance: number;
+  balance: number | null;
+  profit?: number;
   equity: number | null;
 }
 export interface PerformanceDataset {
+  scope?: string;
   balance_points?: PerformancePoint[];
   monthly?: {month:string;change:number}[];
   cashflow?: number;
