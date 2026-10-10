@@ -63,12 +63,26 @@ async function adminAuth(env, path, method, body) {
   return text ? JSON.parse(text) : null;
 }
 
+async function storageRequest(env, path, { method = "GET", body, contentType = "application/json" } = {}) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  const result = await fetch(`${SUPABASE_URL}/storage/v1/${path}`, {
+    method,
+    headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": contentType },
+    body,
+  });
+  const text = await result.text();
+  if (!result.ok) throw new Error(`Storage request failed (${result.status}): ${text.slice(0, 300)}`);
+  return text ? JSON.parse(text) : null;
+}
+
 export async function onRequest({ request, env }) {
   try {
     const url = new URL(request.url);
     const pathname = url.pathname.replace(/^\/vip\/api\/?/, "");
     const method = request.method;
-    const json = method === "GET" || method === "DELETE" ? {} : await request.json();
+    const isMultipart = request.headers.get("content-type")?.includes("multipart/form-data");
+    const form = isMultipart ? await request.formData() : null;
+    const json = method === "GET" || method === "DELETE" ? {} : form ? Object.fromEntries([...form.entries()].filter(([key]) => key !== "file")) : await request.json();
 
     if (pathname === "member" && method === "GET") {
       const session = await requireUser(request, env);
@@ -114,7 +128,7 @@ export async function onRequest({ request, env }) {
       return response({ admin: session.member, members: enrichedMembers, licenses, bindings, events, announcements, materials });
     }
 
-    const session = await requireUser(request, env, true);
+    const session = await requireUser(request, env, pathname.startsWith("admin/"));
     if (session.error) return session.error;
 
     if (pathname === "admin/members" && method === "POST") {
@@ -130,6 +144,9 @@ export async function onRequest({ request, env }) {
     if (pathname.startsWith("admin/members/") && method === "DELETE") {
       const id = pathname.split("/").at(-1);
       if (id === session.user.id) return response({ error: "Admin tidak dapat menghapus akunnya sendiri dari portal." }, 400);
+      const target = await supabase(env, `helix_members?id=eq.${encodeURIComponent(id)}&select=role`);
+      if (!target.length) return response({ error: "Member tidak ditemukan." }, 404);
+      if (target[0].role === "admin") return response({ error: "Akun admin hanya dapat dikelola melalui prosedur administrator terpisah." }, 400);
       await adminAuth(env, `admin/users/${encodeURIComponent(id)}`, "DELETE");
       return response({ ok: true });
     }
@@ -223,10 +240,25 @@ export async function onRequest({ request, env }) {
     if (pathname === "admin/materials" && method === "POST") {
       const row = { title: String(json.title || "").trim(), description: String(json.description || "").trim(), kind: json.kind || "guide", storage_path: json.storage_path || null, published: Boolean(json.published), created_by: session.user.id };
       if (!row.title) return response({ error: "Nama material wajib diisi." }, 400);
+      const file = form?.get("file");
+      if (file && typeof file.arrayBuffer === "function" && file.size > 0) {
+        if (file.size > 50 * 1024 * 1024) return response({ error: "Ukuran file maksimum 50 MB." }, 400);
+        const extension = file.name.split(".").pop()?.toLowerCase() || "";
+        if (!/^(pdf|mp4|zip|ex5|png|jpe?g|webp|txt|mq5)$/.test(extension)) return response({ error: "Jenis file yang didukung: PDF, MP4, ZIP, EX5, PNG, JPG, WEBP, TXT, MQ5." }, 400);
+        const bucket = "helix-vip-materials";
+        try { await storageRequest(env, `bucket/${bucket}`); }
+        catch { await storageRequest(env, "bucket", { method: "POST", body: JSON.stringify({ id: bucket, name: bucket, public: false, file_size_limit: 52428800, allowed_mime_types: ["application/pdf", "video/mp4", "application/zip", "application/x-zip-compressed", "application/octet-stream", "image/png", "image/jpeg", "image/webp", "text/plain"] }) }); }
+        const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90) || `material.${extension}`;
+        const objectPath = `${crypto.randomUUID()}/${filename}`;
+        await storageRequest(env, `object/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: file, contentType: file.type || "application/octet-stream" });
+        row.storage_path = `${bucket}:${objectPath}`;
+      }
       if (row.storage_path) {
-        let link;
-        try { link = new URL(row.storage_path); } catch { return response({ error: "URL material tidak valid." }, 400); }
-        if (link.protocol !== "https:") return response({ error: "URL material harus menggunakan HTTPS." }, 400);
+        if (!row.storage_path.startsWith("helix-vip-materials:")) {
+          let link;
+          try { link = new URL(row.storage_path); } catch { return response({ error: "URL material tidak valid." }, 400); }
+          if (link.protocol !== "https:") return response({ error: "URL material harus menggunakan HTTPS." }, 400);
+        }
       }
       const created = await supabase(env, "helix_materials?select=*", { method: "POST", body: row });
       return response({ ok: true, item: created[0] }, 201);
@@ -234,8 +266,34 @@ export async function onRequest({ request, env }) {
 
     if (pathname.startsWith("admin/materials/") && method === "DELETE") {
       const id = pathname.split("/").at(-1);
+      const material = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=storage_path`);
+      if (material[0]?.storage_path?.startsWith("helix-vip-materials:")) {
+        const objectPath = material[0].storage_path.split(":").slice(1).join(":");
+        await storageRequest(env, "object/helix-vip-materials", { method: "DELETE", body: JSON.stringify({ prefixes: [objectPath] }) });
+      }
       await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
       return response({ ok: true });
+    }
+
+    if (pathname.startsWith("member/materials/") && method === "GET") {
+      const memberSession = await requireUser(request, env);
+      if (memberSession.error) return memberSession.error;
+      const id = pathname.split("/").at(-1);
+      const rows = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&published=eq.true&select=storage_path,title`);
+      if (!rows.length || !rows[0].storage_path) return response({ error: "File material tidak ditemukan." }, 404);
+      const storage = rows[0].storage_path;
+      if (!storage.startsWith("helix-vip-materials:")) {
+        let external;
+        try { external = new URL(storage); } catch { return response({ error: "URL file tidak valid." }, 400); }
+        if (external.protocol !== "https:") return response({ error: "URL file tidak aman." }, 400);
+        return response({ url: external.href });
+      }
+      const [, objectPath] = storage.split(":", 2);
+      const signed = await storageRequest(env, `object/sign/helix-vip-materials/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: JSON.stringify({ expiresIn: 600 }) });
+      const signedPath = signed.signedURL || signed.signedUrl;
+      const fileUrl = new URL(signedPath.startsWith("http") ? signedPath : `${SUPABASE_URL}/storage/v1${signedPath}`);
+      fileUrl.searchParams.set("download", "");
+      return response({ url: fileUrl.toString() });
     }
 
     if (pathname.startsWith("admin/materials/") && method === "PATCH") {

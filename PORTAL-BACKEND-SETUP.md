@@ -27,8 +27,8 @@ Member sign-up remains disabled. Admin invitations allow each member to set thei
 
 ## Operational scope
 
-The live portal supports member invitations, reset links, account suspension, license creation and key rotation, entitlement status/expiry/slot changes, binding release, announcements, materials, and member read-only views. License keys are stored as SHA-256 hashes and shown to an admin only at creation or rotation.
+The live portal supports member invitations, reset links, account suspension, license creation and key rotation, entitlement status/expiry/slot changes, binding release, announcements, materials, and member read-only views. License keys are stored as SHA-256 hashes and shown to an admin only at creation or rotation. Admin material uploads are stored in a private `helix-vip-materials` Supabase Storage bucket; member download links are signed for ten minutes.
 
 The MT5 account-pairing handshake still requires the HELIX EA to call a production License API. The website must not invent a pairing code or mark a terminal active by itself. The current pages show server-confirmed account bindings and let the member/admin release a binding safely; they do not claim that the EA pairing API is live.
 
-Material rows support HTTPS links. To host private downloadable files, configure a Supabase Storage bucket and signed upload/download routes before placing private file links here.
+Material rows also support HTTPS links to external resources.
