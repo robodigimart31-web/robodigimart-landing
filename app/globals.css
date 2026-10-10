@@ -570,3 +570,8 @@ body{background:#090c10}
 @media(max-width:760px){.bt-diagnostic{padding:18px 12px}.bt-diagnostic figcaption{gap:10px;margin-bottom:18px}.bt-diagnostic h3{font-size:15px}.bt-diagnostic figcaption p{font-size:11px}.bt-diagnostics{gap:14px;margin-top:26px}}
 
 .bt-panel-key{display:flex;flex-wrap:wrap;gap:8px 24px;max-width:860px;margin:0 auto 12px;color:#d4dbe0;font-size:11px}.bt-panel-key span:before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:#d9b56e;margin-right:8px}
+
+/* Clip screenshot chrome in layout; original report pixels remain unchanged. */
+.bt-original-chart:has(.bt-cropped-chart){max-width:1027px;background:#202020}
+.bt-cropped-chart{position:relative;overflow:hidden;min-width:860px;width:100%;background:#202020}
+.bt-cropped-chart img{position:absolute;max-width:none;height:auto}

@@ -1123,20 +1123,49 @@
     }
   ],
   "diagnostics": {
+    "summary": {
+      "src": "/images/backtest/quadriga-dark-summary-a7351f88fed0.png",
+      "width": 1086,
+      "height": 411,
+      "crop": {
+        "x": 18,
+        "y": 36,
+        "width": 1027,
+        "height": 365
+      }
+    },
     "distribution": {
-      "src": "/images/backtest/quadriga-hst-0203b1333110.png",
-      "width": 860,
-      "height": 400
+      "src": "/images/backtest/quadriga-dark-distribution-316bac4e9b2a.png",
+      "width": 1098,
+      "height": 359,
+      "crop": {
+        "x": 27,
+        "y": 10,
+        "width": 1027,
+        "height": 349
+      }
     },
     "correlation": {
-      "src": "/images/backtest/quadriga-mfemae-632168f9250d.png",
-      "width": 860,
-      "height": 400
+      "src": "/images/backtest/quadriga-dark-correlation-a4ba5b241267.png",
+      "width": 1073,
+      "height": 461,
+      "crop": {
+        "x": 36,
+        "y": 16,
+        "width": 1027,
+        "height": 445
+      }
     },
     "holding": {
-      "src": "/images/backtest/quadriga-holding-9b7eedea5833.png",
-      "width": 860,
-      "height": 200
+      "src": "/images/backtest/quadriga-dark-holding-bde67ade12bb.png",
+      "width": 1056,
+      "height": 250,
+      "crop": {
+        "x": 25,
+        "y": 0,
+        "width": 1027,
+        "height": 250
+      }
     }
   }
 }

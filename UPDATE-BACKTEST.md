@@ -35,3 +35,6 @@ Simpan HTML beserta PNG pendamping dari MT5 dalam folder yang sama. Importer oto
 Gambar dipublikasikan persis dari laporan sumber, dengan nama file berbasis hash agar cache tidak menampilkan versi lama. Jika laporan baru tidak membawa PNG, bagian grafik tambahan disembunyikan; gambar laporan sebelumnya tidak dipakai untuk laporan baru.
 
 Sumber gambar laporan aktif telah diverifikasi melalui kesamaan SHA-256 file HTML dengan laporan asli yang diberikan. Gambar PNG dipertahankan persis seperti ekspor MT5, termasuk latar putih dan label bawaan yang pucat. Judul dan keterangan HTML bilingual ditambahkan di luar gambar agar konteks analisis terbaca. Pada ponsel, grafik dapat digeser horizontal tanpa mengecilkan teks sampai tidak terbaca.
+
+### Dark report screenshots (10 October 2026)
+The current diagnostics include the matching dark MT5 summary and three chart screenshots. Optional `crop` coordinates hide window chrome and white margins using CSS, preserving original pixels. The screenshot metrics match the imported HTML (net profit 15,991.23; relative equity drawdown 2.08%). Reimporting a new HTML report replaces these diagnostics, so screenshots from an older report cannot carry forward.
