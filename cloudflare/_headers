@@ -13,3 +13,6 @@
 
 /fonts/*
   Cache-Control: public, max-age=86400
+
+/vip/*
+  Cache-Control: no-store, max-age=0
