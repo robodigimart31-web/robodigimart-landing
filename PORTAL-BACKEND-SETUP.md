@@ -14,7 +14,7 @@ The first portal deployment is a safe UI prototype. The production license flow 
 ## One-time configuration still required
 
 1. Create or open the Supabase project.
-2. Run `schema.sql`, then `license-schema.sql`, then `license-policies.sql` in the SQL Editor.
+2. Run `schema.sql`, then `license-schema.sql`, then `license-policies.sql`, then `auth-trigger.sql` in the SQL Editor.
 3. Enable email/password Auth (and configure production SMTP before inviting customers).
 4. Add the Supabase URL and server-only service-role key as deployment secrets. Never put the service-role key in `public/vip` or browser JavaScript.
 5. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from `.env.example` to the public build environment. Add `SUPABASE_SERVICE_ROLE_KEY` only as a server-side deployment secret.
