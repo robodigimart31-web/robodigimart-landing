@@ -1,5 +1,3 @@
-/ /id 302
 /products/quadriga /id/products/quadriga 301
 
-# VIP host routing is handled by functions/_middleware.js. Pages _redirects
-# cannot match the request hostname.
+# Host-specific root routing is handled by functions/_middleware.js.

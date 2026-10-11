@@ -39,6 +39,6 @@ for (const locale of ["id", "en"]) {
 await access(path.join(root, "404.html"));
 assert((await read("sitemap.xml")).includes("/en/products/quadriga"));
 assert((await read("robots.txt")).includes("sitemap.xml"));
-assert((await read("_redirects")).includes("/ /id 302"));
+assert(!(await read("_redirects")).split(/\r?\n/).some(line => /^\/\s+\/id\s/.test(line)), "Hostname-blind root redirect would send the VIP host to the landing page");
 assert((await read("_headers")).includes("X-Content-Type-Options: nosniff"));
 console.log(`PASS: ${count} files; 4 localized pages; FAQ; images; SEO; redirects; headers; no private APIs.`);

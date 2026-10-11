@@ -133,7 +133,11 @@ test('VIP subdomain maps root and existing shortcut routes to the live portal sh
     assert.equal(new URL((await response.json()).url).pathname,expected);
     assert.equal(new URL(forwarded.url).searchParams.get('flow'),'invite');
   }
-  const request=new Request('https://www.robodigimart.com/');let forwarded=request;
-  await vipHostRouting({request,next:async value=>{forwarded=value||request;return new Response('ok');}});
-  assert.equal(forwarded.url,request.url,'main website host is not rewritten');
+  const mainRequest=new Request('https://www.robodigimart.com/');let forwarded=mainRequest;
+  const mainResponse=await vipHostRouting({request:mainRequest,next:async value=>{forwarded=value||mainRequest;return new Response('ok');}});
+  assert.equal(mainResponse.status,302);
+  assert.equal(mainResponse.headers.get('location'),'https://www.robodigimart.com/id');
+  const nonRoot=new Request('https://www.robodigimart.com/id');
+  await vipHostRouting({request:nonRoot,next:async value=>{forwarded=value||nonRoot;return new Response('ok');}});
+  assert.equal(forwarded.url,nonRoot.url,'marketing host non-root routes are unchanged');
 });
