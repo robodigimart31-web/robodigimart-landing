@@ -72,6 +72,39 @@ test('member role cannot enter admin API when license features are enabled', asy
   assert.equal(response.status,403);assert.equal((await response.json()).error,'Akses admin diperlukan.');
 });
 
+test('member role changes require a verified admin and call the audited role RPC with server actor identity', async t => {
+  const actor='00000000-0000-4000-8000-000000000010',target='00000000-0000-4000-8000-000000000011';let rpcArgs;
+  t.mock.method(globalThis,'fetch',async (url,options)=>{
+    if(String(url).includes('/auth/v1/user'))return Response.json({id:actor});
+    if(String(url).includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);
+    if(String(url).includes('/rest/v1/rpc/helix_admin_set_member_role')){rpcArgs=JSON.parse(options.body);return Response.json({ok:true,role:'admin'});}
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const request=new Request(`https://local.test/vip/api/admin/members/${target}/role`,{method:'PATCH',headers:{authorization:'Bearer admin-session','content-type':'application/json'},body:JSON.stringify({role:'admin',reason:'Approved for operations'})});
+  const response=await vipApi({request,env:{SUPABASE_SERVICE_ROLE_KEY:'test-service-key'}});
+  assert.equal(response.status,200);assert.deepEqual(rpcArgs,{p_target_member_id:target,p_actor_id:actor,p_role:'admin',p_reason:'Approved for operations'});
+});
+
+test('role change rejects member callers and blocks self role changes before RPC', async t => {
+  const actor='00000000-0000-4000-8000-000000000010',target='00000000-0000-4000-8000-000000000011';let rpcCalls=0;
+  t.mock.method(globalThis,'fetch',async url=>String(url).includes('/auth/v1/user')?Response.json({id:actor}):Response.json([{id:actor,email:'test@test.invalid',role:'member'}]));
+  const memberRequest=new Request(`https://local.test/vip/api/admin/members/${target}/role`,{method:'PATCH',headers:{authorization:'Bearer member-session','content-type':'application/json'},body:JSON.stringify({role:'admin',reason:'Approved'})});
+  assert.equal((await vipApi({request:memberRequest,env:{SUPABASE_SERVICE_ROLE_KEY:'test'}})).status,403);
+  t.mock.restoreAll();
+  t.mock.method(globalThis,'fetch',async (url,options)=>{if(String(url).includes('/auth/v1/user'))return Response.json({id:actor});if(String(url).includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(String(url).includes('/rpc/helix_admin_set_member_role'))rpcCalls++;return Response.json([])});
+  const selfRequest=new Request(`https://local.test/vip/api/admin/members/${actor}/role`,{method:'PATCH',headers:{authorization:'Bearer admin-session','content-type':'application/json'},body:JSON.stringify({role:'member',reason:'Approved'})});
+  assert.equal((await vipApi({request:selfRequest,env:{SUPABASE_SERVICE_ROLE_KEY:'test'}})).status,400);assert.equal(rpcCalls,0);
+});
+
+test('portal admin and member source use only branded dialogs for actions and contain no native popup calls', async () => {
+  const paths=['public/vip/index.html','public/vip/admin/index.html','public/vip/helix-ui/js/portal-r1.js'];
+  for(const path of paths){const source=await readFile(path,'utf8');assert.doesNotMatch(source,/(?<![.\w])(?:window\.)?(?:alert|confirm|prompt)\s*\(/,`${path} must not use browser popups`);}
+  const admin=await readFile('public/vip/admin/index.html','utf8'),ui=await readFile('public/vip/helix-ui/js/helix-ui.js','utf8'),migration=await readFile('supabase/migrations/202610110002_helix_admin_member_roles.sql','utf8');
+  assert.match(admin,/data-member-role/);assert.match(admin,/admin\/members\/\$\{b\.dataset\.memberRole\}\/role/);assert.match(ui,/hx-dialog-backdrop/);assert.match(migration,/ADMIN_REQUIRED/);assert.match(migration,/LAST_ADMIN/);assert.match(migration,/helix_member_role_audit/);
+  for(const path of ['public/vip/index.html','public/vip/admin/index.html']){const html=await readFile(path,'utf8');for(const match of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)){if(match[1].trim())new vm.Script(match[1],{filename:path});}}
+  new vm.Script(ui,{filename:'helix-ui.js'});
+});
+
 test('pair poll and telemetry reject missing session proof before database access', async t => {
   let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;throw new Error('must not call db')});
   const request = new Request('https://local.test/api', {method:'POST',headers:{'content-type':'application/json',origin:'https://www.robodigimart.com'},body:'{}'});

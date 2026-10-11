@@ -250,6 +250,22 @@ export async function onRequest({ request, env }) {
       return response({ ok: true, member: invited.user || invited, message: "Undangan aktivasi dikirim ke email member." }, 201);
     }
 
+    if (/^admin\/members\/[0-9a-f-]{36}\/role$/i.test(pathname) && method === "PATCH") {
+      const targetId = pathname.split("/")[2];
+      const role = String(json.role || "");
+      const reason = String(json.reason || "").trim();
+      if (!/^[0-9a-f-]{36}$/i.test(targetId) || !["admin", "member"].includes(role)) return response({ error: "INVALID_ROLE_CHANGE" }, 400);
+      if (targetId === session.user.id) return response({ error: "SELF_ROLE_CHANGE_BLOCKED", message: "Role akun yang sedang digunakan tidak dapat diubah dari sesi ini." }, 400);
+      if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan perubahan wajib diisi (3–300 karakter)." }, 400);
+      try {
+        const result = await rpc(env, "helix_admin_set_member_role", { p_target_member_id: targetId, p_actor_id: session.user.id, p_role: role, p_reason: reason });
+        if (!result?.ok) return response({ error: result?.error_code || "ROLE_CHANGE_FAILED" }, result?.error_code === "MEMBER_NOT_FOUND" ? 404 : 400);
+        return response({ ok: true, role: result.role, unchanged: Boolean(result.unchanged) });
+      } catch {
+        return response({ error: "ROLE_MIGRATION_REQUIRED", message: "Fungsi audit perubahan role belum tersedia. Terapkan migration 202610110002_helix_admin_member_roles.sql terlebih dahulu." }, 503);
+      }
+    }
+
     if (pathname.startsWith("admin/members/") && method === "DELETE") {
       const id = pathname.split("/").at(-1);
       if (id === session.user.id) return response({ error: "Admin tidak dapat menghapus akunnya sendiri dari portal." }, 400);
