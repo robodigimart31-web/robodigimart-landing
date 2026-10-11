@@ -27,6 +27,18 @@ insert into public.helix_license_product_policies(license_id,license_scope,allow
 select l.id,'product',array[l.product_slug] from public.helix_licenses l
 on conflict(license_id) do nothing;
 
+create or replace function public.helix_license_default_product_policy()
+returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+  insert into public.helix_license_product_policies(license_id,license_scope,allowed_products)
+  values(new.id,'helix_suite','{}'::text[])
+  on conflict(license_id) do nothing;
+  return new;
+end $$;
+drop trigger if exists helix_licenses_default_product_policy on public.helix_licenses;
+create trigger helix_licenses_default_product_policy after insert on public.helix_licenses
+for each row execute function public.helix_license_default_product_policy();
+
 alter table public.helix_pairing_requests
   add column if not exists ea_product_id text,
   add column if not exists ea_version text;
@@ -245,6 +257,7 @@ do $$ declare f text; begin
     execute format('revoke all on function public.%s from public,anon,authenticated',f);
     execute format('grant execute on function public.%s to service_role',f);
   end loop;
+  revoke all on function public.helix_license_default_product_policy() from public,anon,authenticated,service_role;
   foreach f in array array['helix_pairing_start(text,text,text,text,text,text,text,text,text)','helix_pairing_start(text,text,text,text,text,text,text,text,text,text,text)','helix_pairing_lookup(text,uuid,uuid,boolean)','helix_pairing_approve(text,uuid,uuid,uuid,boolean)','helix_pairing_poll(text)','helix_license_sync(text)','helix_touch_binding(uuid,text,text,text)'] loop
     execute format('revoke all on function public.%s from public,anon,authenticated',f);
     execute format('grant execute on function public.%s to service_role',f);
