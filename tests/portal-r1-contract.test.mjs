@@ -168,6 +168,18 @@ test('member, admin, and login shells use the supplied HELIX brand and SVG asset
   assert.match(css,/\.role-pill img/);
 });
 
+test('invite and recovery password success requires an in-app confirmation then returns to a clean login URL', async () => {
+  for (const path of ['public/vip/login.html','public/vip/login/index.html']) {
+    const html=await readFile(path,'utf8');
+    assert.match(html,/function showPasswordSaved\(\)/);
+    assert.match(html,/Password berhasil disimpan[\s\S]*Tekan OK untuk kembali ke halaman login/);
+    assert.match(html,/await client\.auth\.signOut\(\);await showPasswordSaved\(\);sessionStorage\.setItem\('helix-password-updated','1'\);location\.replace\('\/vip\/login'\)/);
+    assert.match(html,/sessionStorage\.removeItem\('helix-password-updated'\)/);
+    const inline=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>match[1]).at(-1);
+    new vm.Script(inline,{filename:path});
+  }
+});
+
 test('member profile uses one performance card above the profile and labels logout clearly', async () => {
   const portal=await readFile('public/vip/index.html','utf8');
   const enhancements=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8');
