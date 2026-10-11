@@ -96,6 +96,22 @@ test('role change rejects member callers and blocks self role changes before RPC
   assert.equal((await vipApi({request:selfRequest,env:{SUPABASE_SERVICE_ROLE_KEY:'test'}})).status,400);assert.equal(rpcCalls,0);
 });
 
+test('admin member performance summary stays closed until EA telemetry is verified', async t => {
+  const actor='00000000-0000-4000-8000-000000000010';let rpcCalls=0;
+  t.mock.method(globalThis,'fetch',async url=>{if(String(url).includes('/auth/v1/user'))return Response.json({id:actor});if(String(url).includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(String(url).includes('/rpc/helix_admin_member_performance_summary'))rpcCalls++;return Response.json([])});
+  const request=new Request('https://local.test/vip/api/admin/member-performance',{headers:{authorization:'Bearer admin-session'}});
+  const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'false',EA_R7_TELEMETRY_READY:'false',SUPABASE_SERVICE_ROLE_KEY:'test'}});
+  assert.equal(response.status,200);assert.equal((await response.json()).status,'WAITING_FOR_EA_R7');assert.equal(rpcCalls,0);
+});
+
+test('admin performance summary uses verified admin identity and migration RPC', async t => {
+  const actor='00000000-0000-4000-8000-000000000010';let rpcArgs;
+  t.mock.method(globalThis,'fetch',async (url,options)=>{if(String(url).includes('/auth/v1/user'))return Response.json({id:actor});if(String(url).includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(String(url).includes('/rest/v1/rpc/helix_admin_member_performance_summary')){rpcArgs=JSON.parse(options.body);return Response.json({ok:true,status:'READY',members:[{member_id:'m1',status:'READY',net_profit:42,winrate:75,profit_factor:2.5}]})}throw new Error(`Unexpected request: ${url}`)});
+  const request=new Request('https://local.test/vip/api/admin/member-performance',{headers:{authorization:'Bearer admin-session'}});
+  const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'true',EA_R7_TELEMETRY_READY:'true',SUPABASE_SERVICE_ROLE_KEY:'test'}});
+  assert.equal(response.status,200);assert.deepEqual(rpcArgs,{p_actor_id:actor});assert.equal((await response.json()).members[0].profit_factor,2.5);
+});
+
 test('portal admin and member source use only branded dialogs for actions and contain no native popup calls', async () => {
   const paths=['public/vip/index.html','public/vip/admin/index.html','public/vip/helix-ui/js/portal-r1.js'];
   for(const path of paths){const source=await readFile(path,'utf8');assert.doesNotMatch(source,/(?<![.\w])(?:window\.)?(?:alert|confirm|prompt)\s*\(/,`${path} must not use browser popups`);}
@@ -103,6 +119,11 @@ test('portal admin and member source use only branded dialogs for actions and co
   assert.match(admin,/data-member-role/);assert.match(admin,/admin\/members\/\$\{b\.dataset\.memberRole\}\/role/);assert.match(ui,/hx-dialog-backdrop/);assert.match(migration,/ADMIN_REQUIRED/);assert.match(migration,/LAST_ADMIN/);assert.match(migration,/helix_member_role_audit/);
   for(const path of ['public/vip/index.html','public/vip/admin/index.html']){const html=await readFile(path,'utf8');for(const match of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)){if(match[1].trim())new vm.Script(match[1],{filename:path});}}
   new vm.Script(ui,{filename:'helix-ui.js'});
+});
+
+test('admin member menu includes live performance columns and aggregate RPC keeps mixed currencies separate', async () => {
+  const admin=await readFile('public/vip/admin/index.html','utf8'),api=await readFile('functions/vip/api/[[path]].js','utf8'),sql=await readFile('supabase/migrations/202610110003_helix_admin_member_performance.sql','utf8');
+  assert.match(admin,/Performa Trading per Member/);assert.match(admin,/Net profit/);assert.match(admin,/Win rate/);assert.match(admin,/Profit factor/);assert.match(api,/admin\/member-performance/);assert.match(api,/EA_R7_TELEMETRY_READY/);assert.match(sql,/MIXED_CURRENCY/);assert.match(sql,/helix_admin_member_performance_summary/);assert.match(sql,/revoke all on function[\s\S]*from public,anon,authenticated/);assert.match(sql,/grant execute[\s\S]*to service_role/);
 });
 
 test('pair poll and telemetry reject missing session proof before database access', async t => {

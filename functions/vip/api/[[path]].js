@@ -240,6 +240,20 @@ export async function onRequest({ request, env }) {
     const session = await requireUser(request, env, pathname.startsWith("admin/"));
     if (session.error) return session.error;
 
+    if (pathname === "admin/member-performance" && method === "GET") {
+      if (env.PORTAL_PERFORMANCE_ENABLED !== "true" || env.EA_R7_TELEMETRY_READY !== "true") {
+        return response({ status: "WAITING_FOR_EA_R7", members: [], message: "Ringkasan performa menunggu kontrak EA/telemetry diverifikasi dan fitur diaktifkan." });
+      }
+      try {
+        const result = await rpc(env, "helix_admin_member_performance_summary", { p_actor_id: session.user.id });
+        if (!result?.ok) return response({ error: result?.error_code || "ADMIN_PERFORMANCE_SUMMARY_FAILED" }, 403);
+        return response({ status: result.status, members: result.members || [] });
+      } catch (error) {
+        if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "ADMIN_PERFORMANCE_MIGRATION_REQUIRED", message: "Migration helix_admin_member_performance belum diterapkan di Supabase." }, 503);
+        throw error;
+      }
+    }
+
     if (pathname === "admin/members" && method === "POST") {
       const email = String(json.email || "").trim().toLowerCase();
       const displayName = String(json.display_name || "").trim();
