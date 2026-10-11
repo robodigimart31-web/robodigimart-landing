@@ -261,8 +261,9 @@ export async function onRequest({ request, env }) {
         const result = await rpc(env, "helix_admin_set_member_role", { p_target_member_id: targetId, p_actor_id: session.user.id, p_role: role, p_reason: reason });
         if (!result?.ok) return response({ error: result?.error_code || "ROLE_CHANGE_FAILED" }, result?.error_code === "MEMBER_NOT_FOUND" ? 404 : 400);
         return response({ ok: true, role: result.role, unchanged: Boolean(result.unchanged) });
-      } catch {
-        return response({ error: "ROLE_MIGRATION_REQUIRED", message: "Fungsi audit perubahan role belum tersedia. Terapkan migration 202610110002_helix_admin_member_roles.sql terlebih dahulu." }, 503);
+      } catch (error) {
+        if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "ROLE_MIGRATION_REQUIRED", message: "Fungsi audit perubahan role belum tersedia. Terapkan migration 202610110002_helix_admin_member_roles.sql terlebih dahulu." }, 503);
+        throw error;
       }
     }
 
