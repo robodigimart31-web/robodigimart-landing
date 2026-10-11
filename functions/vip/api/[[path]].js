@@ -108,7 +108,8 @@ export async function onRequest({ request, env }) {
     const performanceRoute = pathname === "member/performance";
     if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
     if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
-    if (otpRoute && env.PORTAL_OTP_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
+    if (otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
+    const otpCanary = otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED === "true";
     if (performanceRoute && (env.PORTAL_PERFORMANCE_ENABLED !== "true" || env.EA_R7_TELEMETRY_READY !== "true")) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
     const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname === "member/performance" || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests");
     const earlySession = earlyAuthRoute ? await verifiedUser(request, env, pathname.startsWith("admin/")) : null;
@@ -156,7 +157,7 @@ export async function onRequest({ request, env }) {
       const code = String(json.pairing_code || "").trim();
       const licenseId = String(json.license_id || "");
       if (!/^\d{8}$/.test(code) || !/^[0-9a-f-]{36}$/i.test(licenseId)) return response({ error: "INVALID_PAIRING" }, 400);
-      const result = await rpc(env, "helix_pairing_lookup", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_member_id: session.user.id, p_license_id: licenseId });
+      const result = await rpc(env, "helix_pairing_lookup", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_member_id: session.user.id, p_license_id: licenseId, p_canary: otpCanary });
       if (!result?.ok) return response({ error: result?.error_code || "INVALID_PAIRING" }, 400);
       return response({ pairing: result });
     }
@@ -167,7 +168,7 @@ export async function onRequest({ request, env }) {
       const code = String(json.pairing_code || "").trim();
       const licenseId = String(json.license_id || "");
       if (!/^\d{8}$/.test(code) || !/^[0-9a-f-]{36}$/i.test(licenseId) || json.confirmed !== true) return response({ error: "CONFIRMATION_REQUIRED" }, 400);
-      const result = await rpc(env, "helix_pairing_approve", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_license_id: licenseId, p_member_id: session.user.id, p_actor_id: session.user.id });
+      const result = await rpc(env, "helix_pairing_approve", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_license_id: licenseId, p_member_id: session.user.id, p_actor_id: session.user.id, p_canary: otpCanary });
       if (!result?.ok) return response({ error: result?.error_code || "PAIRING_REJECTED" }, 400);
       return response({ ok: true, state: result.state, binding_id: result.binding_id, message: "Akun MT5 berhasil dipasangkan. EA akan menerima entitlement saat polling berikutnya." });
     }
