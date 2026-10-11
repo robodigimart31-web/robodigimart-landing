@@ -106,6 +106,16 @@ test('member, admin, and login shells use the supplied HELIX brand and SVG asset
   assert.match(css,/\.role-pill img/);
 });
 
+test('member profile uses one performance card above the profile and labels logout clearly', async () => {
+  const portal=await readFile('public/vip/index.html','utf8');
+  const enhancements=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8');
+  assert.match(portal,/data-logout[^>]*>KELUAR<\/button>/);
+  assert.doesNotMatch(portal,/Keluar dari HELIX/);
+  assert.match(portal,/class="profile-identity"[\s\S]*class="profile-identity-copy"/);
+  assert.match(enhancements,/await featureStatusReady;[\s\S]*if\(section\.querySelector\('\[data-r1-performance\]'\)\)return/);
+  assert.match(enhancements,/if\(profile\)profile\.before\(host\);else section\.append\(host\)/);
+});
+
 test('license create response never returns a key or key hash', async () => {
   const sql=await readFile('supabase/migrations/202610110001_helix_otp_telemetry.sql','utf8');
   const api=await readFile('functions/vip/api/[[path]].js','utf8');
