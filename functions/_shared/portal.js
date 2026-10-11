@@ -82,13 +82,85 @@ function decodeBase64(value) {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
+export const LICENSE_SIGNING_KEY_ID = "helix-ed25519-5a081266524f5068";
+export const LICENSE_SIGNING_PUBLIC_KEY_HEX = "5321c9f73fe4dec6f662d75b7def108262b6ddf9c3681f815ff9df965eb32fa7";
+
+const canonicalIso = (value, field, nullable = false) => {
+  if (nullable && value === null) return null;
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) throw Object.assign(new Error(`INVALID_${field.toUpperCase()}`), { status: 422 });
+  return new Date(value).toISOString();
+};
+
+export function canonicalEntitlementPayload(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw Object.assign(new Error("INVALID_ENTITLEMENT"), { status: 422 });
+  const allowedProducts = input.allowed_products;
+  if (allowedProducts !== "all" && (!Array.isArray(allowedProducts) || !allowedProducts.length || !allowedProducts.every(value => typeof value === "string" && /^[a-z][a-z0-9_]{1,47}$/.test(value)))) {
+    throw Object.assign(new Error("INVALID_ALLOWED_PRODUCTS"), { status: 422 });
+  }
+  const claims = {
+    protocol_version: "v2",
+    key_id: LICENSE_SIGNING_KEY_ID,
+    algorithm: "Ed25519",
+    license_scope: input.license_scope,
+    license_id: input.license_id,
+    binding_id: input.binding_id,
+    account_fingerprint: input.account_fingerprint,
+    status: input.status,
+    license_expires_at: canonicalIso(input.license_expires_at, "license_expires_at", true),
+    entitlement_version: input.entitlement_version,
+    ea_product_id: input.ea_product_id,
+    ea_version: input.ea_version,
+    allowed_products: allowedProducts === "all" ? "all" : [...new Set(allowedProducts)].sort(),
+    issued_at: canonicalIso(input.issued_at, "issued_at"),
+    server_time: canonicalIso(input.server_time, "server_time"),
+    offline_expires_at: canonicalIso(input.offline_expires_at, "offline_expires_at"),
+  };
+  const issuedAt = Date.parse(claims.issued_at);
+  const serverTime = Date.parse(claims.server_time);
+  const offlineExpiry = Date.parse(claims.offline_expires_at);
+  if (!["helix_suite", "product"].includes(claims.license_scope)
+    || !/^[0-9a-f-]{36}$/i.test(claims.license_id || "")
+    || !/^[0-9a-f-]{36}$/i.test(claims.binding_id || "")
+    || !/^[0-9a-f]{64}$/.test(claims.account_fingerprint || "")
+    || !["ACTIVE", "SUSPENDED", "REVOKED", "EXPIRED"].includes(claims.status)
+    || !Number.isSafeInteger(claims.entitlement_version) || claims.entitlement_version < 1
+    || !/^[a-z][a-z0-9_]{1,47}$/.test(claims.ea_product_id || "")
+    || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(claims.ea_version || "")
+    || issuedAt > serverTime || offlineExpiry < issuedAt
+    || (claims.license_expires_at !== null && offlineExpiry > Date.parse(claims.license_expires_at))) {
+    throw Object.assign(new Error("INVALID_ENTITLEMENT_CLAIMS"), { status: 422 });
+  }
+  if (claims.allowed_products !== "all" && !claims.allowed_products.includes(claims.ea_product_id)) {
+    throw Object.assign(new Error("PRODUCT_NOT_ALLOWED"), { status: 403 });
+  }
+  return claims;
+}
+
+export function validateEntitlementPolicy(claims, expected, now = Date.now()) {
+  if (!claims || !expected || typeof expected !== "object") return "INVALID_ENTITLEMENT";
+  if (claims.status !== "ACTIVE") return claims.status === "SUSPENDED" ? "LICENSE_SUSPENDED" : claims.status === "REVOKED" ? "LICENSE_REVOKED" : "LICENSE_NOT_ACTIVE";
+  const licenseExpiry = claims.license_expires_at === null ? null : Date.parse(claims.license_expires_at);
+  if (licenseExpiry !== null && (!Number.isFinite(licenseExpiry) || licenseExpiry <= now)) return "LICENSE_EXPIRED";
+  const offlineExpiry = Date.parse(claims.offline_expires_at);
+  if (!Number.isFinite(offlineExpiry) || offlineExpiry <= now) return "OFFLINE_GRACE_EXPIRED";
+  if (claims.account_fingerprint !== expected.account_fingerprint) return "ACCOUNT_MISMATCH";
+  if (expected.product_is_registered !== true || claims.ea_product_id !== expected.ea_product_id) return "PRODUCT_NOT_ALLOWED";
+  if (claims.allowed_products !== "all" && !claims.allowed_products?.includes(expected.ea_product_id)) return "PRODUCT_NOT_ALLOWED";
+  if (claims.ea_version !== expected.ea_version) return "EA_VERSION_NOT_ALLOWED";
+  if (!Number.isSafeInteger(claims.entitlement_version) || claims.entitlement_version < (expected.minimum_entitlement_version || 1)) return "STALE_ENTITLEMENT";
+  return null;
+}
+
+const base64Url = bytes => btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+
 export async function signedEntitlement(env, payload) {
   const encodedKey = env.LICENSE_SIGNING_PRIVATE_KEY_PKCS8;
   if (!encodedKey) throw Object.assign(new Error("LICENSE_SIGNING_KEY_NOT_CONFIGURED"), { status: 503 });
   const key = await crypto.subtle.importKey("pkcs8", decodeBase64(encodedKey), { name: "Ed25519" }, false, ["sign"]);
-  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  const canonical = canonicalEntitlementPayload(payload);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
   const signature = await crypto.subtle.sign({ name: "Ed25519" }, key, bytes);
-  return { payload, algorithm: "Ed25519", signature: btoa(String.fromCharCode(...new Uint8Array(signature))).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "") };
+  return { payload: canonical, payload_utf8_base64url: base64Url(bytes), algorithm: "Ed25519", key_id: LICENSE_SIGNING_KEY_ID, signature: base64Url(new Uint8Array(signature)) };
 }
 
 export function cors(request) {
