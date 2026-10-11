@@ -1,4 +1,5 @@
-const SUPABASE_URL = "https://wouwoefzghecuiknznvs.supabase.co";
+const DEFAULT_SUPABASE_URL = "https://wouwoefzghecuiknznvs.supabase.co";
+import { hmac, rateLimit, readJson as readBoundedJson, rpc, sha256, verifiedUser } from "../../_shared/portal.js";
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -11,7 +12,7 @@ async function supabase(env, path, { method = "GET", body, token } = {}) {
   const headers = { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" };
   if (method !== "GET") headers.prefer = "return=representation";
   if (token) headers["x-authorization"] = `Bearer ${token}`;
-  const result = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/rest/v1/${path}`, {
     method, headers, body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await result.text();
@@ -19,9 +20,18 @@ async function supabase(env, path, { method = "GET", body, token } = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+async function listLicenses(env, filter = "") {
+  const base = `helix_licenses?${filter ? `${filter}&` : ""}select=id,member_id,product_slug,status,expires_at,max_accounts,created_at,issued_at,first_activated_at,duration_days,activation_policy,last_successful_sync_at,entitlement_version&order=created_at.desc`;
+  try { return await supabase(env, base); }
+  catch {
+    const legacy = `helix_licenses?${filter ? `${filter}&` : ""}select=id,member_id,product_slug,status,expires_at,max_accounts,created_at&order=created_at.desc`;
+    return (await supabase(env, legacy)).map(item => ({ ...item, activation_policy: "legacy_fixed", first_activated_at: null, issued_at: item.created_at, duration_days: null, last_successful_sync_at: null, entitlement_version: null }));
+  }
+}
+
 async function authUser(token, env) {
   if (!token) return null;
-  const result = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/auth/v1/user`, {
     headers: { apikey: env.SUPABASE_PUBLISHABLE_KEY || "sb_publishable_FDLLBcmYFGiS9PDbyvgDtQ_UWUB8fUc", authorization: `Bearer ${token}` },
   });
   if (!result.ok) return null;
@@ -53,7 +63,7 @@ function randomKey() {
 async function adminAuth(env, path, method, body) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error("Cloudflare Pages secret SUPABASE_SERVICE_ROLE_KEY is not configured.");
-  const result = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/auth/v1/${path}`, {
     method,
     headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -63,9 +73,17 @@ async function adminAuth(env, path, method, body) {
   return text ? JSON.parse(text) : null;
 }
 
+function portalBaseUrl(env) {
+  const value = String(env.PORTAL_PUBLIC_URL || "https://www.robodigimart.com").replace(/\/+$/, "");
+  const url = new URL(value);
+  const allowedHost = url.hostname === "robodigimart.com" || url.hostname.endsWith(".robodigimart.com") || url.hostname.endsWith(".pages.dev");
+  if (url.protocol !== "https:" || !allowedHost) throw new Error("PORTAL_PUBLIC_URL is not an allowed HTTPS portal origin.");
+  return url.origin;
+}
+
 async function storageRequest(env, path, { method = "GET", body, contentType = "application/json" } = {}) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  const result = await fetch(`${SUPABASE_URL}/storage/v1/${path}`, {
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/storage/v1/${path}`, {
     method,
     headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": contentType },
     body,
@@ -80,35 +98,122 @@ export async function onRequest({ request, env }) {
     const url = new URL(request.url);
     const pathname = url.pathname.replace(/^\/vip\/api\/?/, "");
     const method = request.method;
+    const licenseRoute = pathname === "admin/licenses" || pathname.startsWith("admin/licenses/") || pathname.startsWith("member/bindings/");
+    const emailRoute = pathname.startsWith("member/email-change-requests") || pathname.startsWith("admin/email-change-requests");
+    const otpRoute = pathname.startsWith("member/pairings/");
+    const performanceRoute = pathname === "member/performance";
+    if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
+    if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Perubahan email menunggu migrasi database dan Auth terverifikasi." }, 503);
+    if (otpRoute && env.PORTAL_OTP_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
+    if (performanceRoute && (env.PORTAL_PERFORMANCE_ENABLED !== "true" || env.EA_R7_TELEMETRY_READY !== "true")) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
+    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname === "member/performance" || pathname.startsWith("admin/email-change-requests");
+    const earlySession = earlyAuthRoute ? await verifiedUser(request, env, pathname.startsWith("admin/")) : null;
+    if (earlySession?.error) return earlySession.error;
     const isMultipart = request.headers.get("content-type")?.includes("multipart/form-data");
     const form = isMultipart ? await request.formData() : null;
-    const json = method === "GET" || method === "DELETE" ? {} : form ? Object.fromEntries([...form.entries()].filter(([key]) => key !== "file")) : await request.json();
+    let json = {};
+    if (method !== "GET" && method !== "DELETE") {
+      if (earlyAuthRoute) json = await readBoundedJson(request, 8_192);
+      else json = form ? Object.fromEntries([...form.entries()].filter(([key]) => key !== "file")) : await request.json();
+    }
 
     if (pathname === "member" && method === "GET") {
       const session = await requireUser(request, env);
       if (session.error) return session.error;
       const id = encodeURIComponent(session.user.id);
       const [licenses, announcements, materials] = await Promise.all([
-        supabase(env, `helix_licenses?member_id=eq.${id}&select=id,product_slug,license_key_hint,status,expires_at,max_accounts,created_at&order=created_at.desc`),
+        listLicenses(env, `member_id=eq.${id}`),
         supabase(env, "helix_announcements?published=eq.true&select=id,title,body,kind,published_at,created_at&order=published_at.desc.nullslast"),
         supabase(env, "helix_materials?published=eq.true&select=id,title,description,kind,storage_path,created_at&order=created_at.desc"),
       ]);
+      for (const license of licenses) {
+        license.effective_status = license.status !== "active" ? license.status.toUpperCase() : license.expires_at && Date.parse(license.expires_at) <= Date.now() ? "EXPIRED" : license.activation_policy === "first_activation" && !license.first_activated_at ? "PENDING ACTIVATION" : "ACTIVE";
+      }
       const licenseIds = licenses.map(x => x.id);
       const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&released_at=is.null&select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at`) : [];
       const events = licenseIds.length ? await supabase(env, `helix_license_events?license_id=in.(${licenseIds.join(",")})&select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100`) : [];
-      return response({ member: session.member, licenses, bindings, events, announcements, materials });
+      let emailChangeRequests = [];
+      try { emailChangeRequests = await supabase(env, `helix_email_change_requests?member_id=eq.${id}&select=id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&order=created_at.desc&limit=20`); } catch { /* migration pending: keep existing member pages available */ }
+      return response({ member: session.member, licenses, bindings, events, announcements, materials, emailChangeRequests });
+    }
+
+    if (pathname === "member/pairings/lookup" && method === "POST") {
+      const session = earlySession;
+      await rateLimit(request, env, "pair_lookup", `${request.headers.get("cf-connecting-ip") || "unknown"}:${session.user.id}`, 15, 600);
+      const code = String(json.pairing_code || "").trim();
+      const licenseId = String(json.license_id || "");
+      if (!/^\d{8}$/.test(code) || !/^[0-9a-f-]{36}$/i.test(licenseId)) return response({ error: "INVALID_PAIRING" }, 400);
+      const result = await rpc(env, "helix_pairing_lookup", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_member_id: session.user.id, p_license_id: licenseId });
+      if (!result?.ok) return response({ error: result?.error_code || "INVALID_PAIRING" }, 400);
+      return response({ pairing: result });
+    }
+
+    if (pathname === "member/pairings/approve" && method === "POST") {
+      const session = earlySession;
+      await rateLimit(request, env, "pair_approve", `${request.headers.get("cf-connecting-ip") || "unknown"}:${session.user.id}`, 8, 600);
+      const code = String(json.pairing_code || "").trim();
+      const licenseId = String(json.license_id || "");
+      if (!/^\d{8}$/.test(code) || !/^[0-9a-f-]{36}$/i.test(licenseId) || json.confirmed !== true) return response({ error: "CONFIRMATION_REQUIRED" }, 400);
+      const result = await rpc(env, "helix_pairing_approve", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_license_id: licenseId, p_member_id: session.user.id, p_actor_id: session.user.id });
+      if (!result?.ok) return response({ error: result?.error_code || "PAIRING_REJECTED" }, 400);
+      return response({ ok: true, state: result.state, binding_id: result.binding_id, message: "Akun MT5 berhasil dipasangkan. EA akan menerima entitlement saat polling berikutnya." });
+    }
+
+    if (pathname === "member/performance" && method === "GET") {
+      const session = earlySession;
+      const uuid = /^[0-9a-f-]{36}$/i;
+      const licenseId = url.searchParams.get("license_id");
+      const bindingId = url.searchParams.get("binding_id");
+      const fromValue = url.searchParams.get("from");
+      const toValue = url.searchParams.get("to");
+      const family = url.searchParams.get("family");
+      if ((licenseId && !uuid.test(licenseId)) || (bindingId && !uuid.test(bindingId)) || (family && family !== "unclassified")) return response({ error: "INVALID_FILTER" }, 400);
+      const from = fromValue ? new Date(fromValue) : null;
+      const to = toValue ? new Date(toValue) : null;
+      if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime())) || (from && to && from >= to) || (from && to && to - from > 366 * 86400000)) return response({ error: "INVALID_DATE_RANGE" }, 400);
+      const summary = await rpc(env, "helix_member_performance_summary", { p_member_id: session.user.id, p_license_id: licenseId, p_binding_id: bindingId, p_from: from?.toISOString() || null, p_to: to?.toISOString() || null, p_family: family });
+      return response(summary);
+    }
+
+    if (pathname === "member/email-change-requests" && method === "GET") {
+      const session = earlySession;
+      const requests = await supabase(env, `helix_email_change_requests?member_id=eq.${encodeURIComponent(session.user.id)}&select=id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&order=created_at.desc&limit=20`);
+      return response({ requests });
+    }
+
+    if (pathname === "member/email-change-requests" && method === "POST") {
+      const session = earlySession;
+      const email = String(json.new_email || "").trim().toLowerCase();
+      const note = String(json.note || "").trim().slice(0, 300);
+      const result = await rpc(env, "helix_email_change_request", { p_member_id: session.user.id, p_new_email: email, p_note: note });
+      return result?.ok ? response(result, 201) : response({ error: result?.error_code || "REQUEST_REJECTED" }, 400);
+    }
+
+    if (pathname === "admin/email-change-requests" && method === "GET") {
+      const requests = await supabase(env, "helix_email_change_requests?select=id,member_id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&status=in.(pending,approved_awaiting_verification)&order=created_at.asc&limit=200");
+      const members = await supabase(env, "helix_members?select=id,display_name,email");
+      const byId = new Map(members.map(member => [member.id, member]));
+      return response({ requests: requests.map(item => ({ ...item, member: byId.get(item.member_id) || null })) });
+    }
+
+    if (pathname.startsWith("admin/email-change-requests/") && method === "POST") {
+      const requestId = pathname.split("/").at(-1);
+      if (!/^[0-9a-f-]{36}$/i.test(requestId) || !["approve", "reject"].includes(json.action)) return response({ error: "INVALID_REQUEST" }, 400);
+      const rows = await supabase(env, `helix_email_change_requests?id=eq.${encodeURIComponent(requestId)}&select=id,member_id,new_email,status`);
+      const item = rows?.[0];
+      if (!item) return response({ error: "REQUEST_NOT_FOUND" }, 404);
+      const decision = await rpc(env, "helix_email_change_decide", { p_request_id: requestId, p_actor_id: earlySession.user.id, p_approve: json.action === "approve", p_note: String(json.note || "").slice(0, 300) });
+      if (!decision?.ok) return response({ error: decision?.error_code || "REQUEST_REJECTED" }, 400);
+      return response({ ok: true, status: json.action === "approve" ? "approved_awaiting_verification" : "rejected", message: json.action === "approve" ? "Disetujui. Member perlu memulai verifikasi alamat baru dari menu profil." : "Permintaan ditolak." });
     }
 
     if (pathname.startsWith("member/bindings/") && method === "POST") {
       const session = await requireUser(request, env);
       if (session.error) return session.error;
       const bindingId = pathname.split("/").at(-1);
-      const bindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&released_at=is.null&select=id,license_id,helix_licenses!inner(member_id)`);
-      const binding = bindings?.[0];
-      if (!binding || binding.helix_licenses?.member_id !== session.user.id) return response({ error: "Akun tidak ditemukan pada profil Anda." }, 404);
-      await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&released_at=is.null`, { method: "PATCH", body: { released_at: new Date().toISOString() } });
-      await supabase(env, "helix_license_events", { method: "POST", body: { license_id: binding.license_id, actor_id: session.user.id, event_type: "reset", binding_id: bindingId, metadata: { source: "member_portal_release" } } });
-      return response({ ok: true });
+      if (!/^[0-9a-f-]{36}$/i.test(bindingId)) return response({ error: "BINDING_NOT_FOUND" }, 404);
+      const result = await rpc(env, "helix_release_binding", { p_member_id: session.user.id, p_binding_id: bindingId, p_actor_id: session.user.id, p_reason: String(json.reason || "Member requested release") });
+      return result?.ok ? response({ ok: true, ...result }) : response({ error: result?.error_code || "RELEASE_REJECTED" }, 404);
     }
 
     if (pathname === "admin" && method === "GET") {
@@ -116,7 +221,7 @@ export async function onRequest({ request, env }) {
       if (session.error) return session.error;
       const [members, licenses, bindings, events, announcements, materials, authUsers] = await Promise.all([
         supabase(env, "helix_members?select=id,email,display_name,role,created_at&order=created_at.desc"),
-        supabase(env, "helix_licenses?select=id,member_id,product_slug,license_key_hint,status,expires_at,max_accounts,created_at&order=created_at.desc"),
+        listLicenses(env),
         supabase(env, "helix_license_bindings?select=id,license_id,broker_server,account_login,mode,last_sync_at,released_at&order=first_seen_at.desc"),
         supabase(env, "helix_license_events?select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100"),
         supabase(env, "helix_announcements?select=id,title,body,kind,published,published_at,created_at&order=created_at.desc"),
@@ -125,7 +230,11 @@ export async function onRequest({ request, env }) {
       ]);
       const authById = new Map((authUsers.users || []).map(user => [user.id, user]));
       const enrichedMembers = members.map(member => ({ ...member, banned_until: authById.get(member.id)?.banned_until || null }));
-      return response({ admin: session.member, members: enrichedMembers, licenses, bindings, events, announcements, materials });
+      let emailRequests = [], emailRequestsAvailable = true;
+      try { emailRequests = await supabase(env, "helix_email_change_requests?select=id,member_id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&status=in.(pending,approved_awaiting_verification)&order=created_at.asc&limit=200"); }
+      catch { emailRequestsAvailable = false; }
+      const membersById = new Map(enrichedMembers.map(member => [member.id, member]));
+      return response({ admin: session.member, members: enrichedMembers, licenses, bindings, events, announcements, materials, emailRequests: emailRequests.map(item => ({ ...item, member: membersById.get(item.member_id) || null })), emailRequestsAvailable });
     }
 
     const session = await requireUser(request, env, pathname.startsWith("admin/"));
@@ -135,7 +244,7 @@ export async function onRequest({ request, env }) {
       const email = String(json.email || "").trim().toLowerCase();
       const displayName = String(json.display_name || "").trim();
       if (!/^\S+@\S+\.\S+$/.test(email)) return response({ error: "Alamat email tidak valid." }, 400);
-      const invited = await adminAuth(env, `invite?redirect_to=${encodeURIComponent("https://www.robodigimart.com/vip/login?flow=invite")}`, "POST", {
+      const invited = await adminAuth(env, `invite?redirect_to=${encodeURIComponent(`${portalBaseUrl(env)}/vip/login?flow=invite`)}`, "POST", {
         email, data: { full_name: displayName },
       });
       return response({ ok: true, member: invited.user || invited, message: "Undangan aktivasi dikirim ke email member." }, 201);
@@ -156,7 +265,7 @@ export async function onRequest({ request, env }) {
       if (json.action === "reset") {
         const rows = await supabase(env, `helix_members?id=eq.${encodeURIComponent(id)}&select=email`);
         if (!rows.length) return response({ error: "Member tidak ditemukan." }, 404);
-        await adminAuth(env, `recover?redirect_to=${encodeURIComponent("https://www.robodigimart.com/vip/login?flow=recovery")}`, "POST", { email: rows[0].email, gotrue_meta_security: {} });
+        await adminAuth(env, `recover?redirect_to=${encodeURIComponent(`${portalBaseUrl(env)}/vip/login?flow=recovery`)}`, "POST", { email: rows[0].email, gotrue_meta_security: {} });
         return response({ ok: true, message: "Link reset password dikirim lewat Supabase Auth." });
       }
       if (json.action === "suspend" || json.action === "unsuspend") {
@@ -167,54 +276,65 @@ export async function onRequest({ request, env }) {
 
     if (pathname === "admin/licenses" && method === "POST") {
       const email = String(json.email || "").trim().toLowerCase();
+      const idempotencyKey = String(json.idempotency_key || "");
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) return response({ error: "INVALID_IDEMPOTENCY_KEY" }, 400);
       const memberRows = await supabase(env, `helix_members?email=eq.${encodeURIComponent(email)}&select=id,email`);
       if (!memberRows.length) return response({ error: "Buat/invite member lebih dulu sebelum membuat license." }, 400);
-      const expiryDays = Math.min(3650, Math.max(1, Number(json.expiry_days) || 730));
-      const maxAccounts = Math.min(50, Math.max(1, Number(json.max_accounts) || 5));
-      const key = randomKey();
-      const hash = await digest(key);
-      const expiresAt = new Date(Date.now() + expiryDays * 86400000).toISOString();
-      const created = await supabase(env, "helix_licenses?select=id,member_id,product_slug,license_key_hint,status,expires_at,max_accounts,created_at", {
-        method: "POST", body: { member_id: memberRows[0].id, product_slug: json.product_slug || "quadriga", license_key_hash: hash, license_key_hint: `${key.slice(0, 15)}••••`, status: "active", expires_at: expiresAt, max_accounts: maxAccounts },
-      });
-      await supabase(env, "helix_license_events", { method: "POST", body: { license_id: created[0].id, actor_id: session.user.id, event_type: "created", metadata: { member_email: email } } });
-      return response({ ok: true, license: created[0], license_key: key }, 201);
+      const expiryDays = json.expiry_days === undefined ? 730 : Number(json.expiry_days);
+      const maxAccounts = json.max_accounts === undefined ? 5 : Number(json.max_accounts);
+      if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 3650 || !Number.isInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 5) return response({ error: "Masa aktif harus 1–3650 hari dan slot harus 1–5." }, 400);
+      if (String(json.product_slug || "quadriga") !== "quadriga") return response({ error: "Produk license belum tersedia." }, 400);
+      const internalLegacyValue = randomKey();
+      const hash = await digest(internalLegacyValue);
+      const created = await rpc(env, "helix_admin_create_license", { p_member_id: memberRows[0].id, p_actor_id: session.user.id, p_product_slug: String(json.product_slug || "quadriga"), p_legacy_hash: hash, p_duration_days: expiryDays, p_max_accounts: maxAccounts, p_idempotency_key: idempotencyKey, p_memo: String(json.memo || "").slice(0,300) });
+      if (!created?.ok) return response({ error: created?.error_code || "LICENSE_CREATE_FAILED" }, 400);
+      return response({ ok: true, license: created.license, activation: created.activation, duration_days: expiryDays }, created.idempotent ? 200 : 201);
     }
 
     if (pathname.startsWith("admin/licenses/") && method === "PATCH") {
       const id = pathname.split("/").at(-1);
       if (json.action === "rotate-key") {
-        const current = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(id)}&select=id,entitlement_version`);
-        if (!current.length) return response({ error: "License tidak ditemukan." }, 404);
-        const key = randomKey();
-        const updated = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(id)}&select=id,license_key_hint`, { method: "PATCH", body: { license_key_hash: await digest(key), license_key_hint: `${key.slice(0, 19)}••••`, entitlement_version: Number(current[0].entitlement_version) + 1, updated_at: new Date().toISOString() } });
-        await supabase(env, "helix_license_events", { method: "POST", body: { license_id: id, actor_id: session.user.id, event_type: "created", metadata: { action: "license_key_rotated" } } });
-        return response({ ok: true, license: updated?.[0], license_key: key });
+        return response({ error: "LEGACY_KEY_DISABLED", message: "Customer authentication menggunakan pairing OTP. License key manual tidak diterbitkan." }, 410);
       }
       if (json.action === "release-slot") {
-        const result = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(json.binding_id)}&license_id=eq.${encodeURIComponent(id)}&released_at=is.null`, { method: "PATCH", body: { released_at: new Date().toISOString() } });
-        await supabase(env, "helix_license_events", { method: "POST", body: { license_id: id, actor_id: session.user.id, event_type: "reset", metadata: { binding_id: json.binding_id } } });
-        return response({ ok: true, result });
+        if (String(json.reason || "").trim().length < 3) return response({ error: "Alasan pelepasan slot wajib diisi (minimal 3 karakter)." }, 400);
+        const rows = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(json.binding_id)}&license_id=eq.${encodeURIComponent(id)}&select=id,license_id,helix_licenses!inner(member_id)`);
+        const binding = rows?.[0];
+        if (!binding) return response({ error: "BINDING_NOT_FOUND" }, 404);
+        const result = await rpc(env, "helix_release_binding", { p_member_id: binding.helix_licenses.member_id, p_binding_id: binding.id, p_actor_id: session.user.id, p_reason: String(json.reason).trim().slice(0,300) });
+        return result?.ok ? response({ ok: true, result }) : response({ error: result?.error_code || "RELEASE_REJECTED" }, 400);
       }
-      const updates = {};
-      if (["active", "suspended", "revoked", "expired"].includes(json.status)) updates.status = json.status;
+      if (json.action === "renew") {
+        const days = Number(json.duration_days || 730);
+        if (!Number.isInteger(days) || days < 1 || days > 3650) return response({ error: "INVALID_DURATION" }, 400);
+        const reason = String(json.reason || "").trim();
+        if (reason.length < 3) return response({ error: "REASON_REQUIRED" }, 400);
+        const renewed = await rpc(env, "helix_admin_update_license", { p_license_id: id, p_actor_id: session.user.id, p_status: null, p_max_accounts: null, p_expires_at: null, p_duration_days: days, p_reason: reason.slice(0,300) });
+        return renewed?.ok ? response({ ok: true, license: renewed.license }) : response({ error: renewed?.error_code || "LICENSE_UPDATE_FAILED" }, 400);
+      }
+      let status = null;
+      if (json.status !== undefined) {
+        if (!["active", "suspended", "revoked", "expired"].includes(json.status)) return response({ error: "INVALID_STATUS" }, 400);
+        status = json.status;
+      }
+      let slots = null;
       if (json.max_accounts !== undefined) {
-        const slots = Number(json.max_accounts);
-        if (!Number.isInteger(slots) || slots < 1 || slots > 50) return response({ error: "Batas slot harus bilangan bulat antara 1 sampai 50." }, 400);
-        updates.max_accounts = slots;
+        slots = Number(json.max_accounts);
+        if (!Number.isInteger(slots) || slots < 1 || slots > 5) return response({ error: "Batas slot harus bilangan bulat antara 1 sampai 5." }, 400);
       }
+      let expiry = null;
       if (json.expires_at) {
-        const expiry = new Date(json.expires_at);
-        if (Number.isNaN(expiry.getTime())) return response({ error: "Tanggal expiry tidak valid." }, 400);
-        updates.expires_at = expiry.toISOString();
+        const parsed = new Date(json.expires_at);
+        if (Number.isNaN(parsed.getTime())) return response({ error: "Tanggal expiry tidak valid." }, 400);
+        expiry = parsed.toISOString();
       }
-      const current = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(id)}&select=entitlement_version`);
-      if (!current.length) return response({ error: "License tidak ditemukan." }, 404);
-      updates.entitlement_version = Number(current[0].entitlement_version) + 1;
-      updates.updated_at = new Date().toISOString();
-      const result = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(id)}&select=id,status,expires_at,max_accounts,entitlement_version`, { method: "PATCH", body: updates });
-      if (json.status === "suspended" || json.status === "revoked") await supabase(env, "helix_license_events", { method: "POST", body: { license_id: id, actor_id: session.user.id, event_type: json.status, metadata: {} } });
-      return response({ ok: true, license: result?.[0] });
+      const duration = json.duration_days === undefined ? null : Number(json.duration_days);
+      if (duration !== null && (!Number.isInteger(duration) || duration < 1 || duration > 3650)) return response({ error: "INVALID_DURATION" }, 400);
+      const reason = String(json.reason || "").trim();
+      if (reason.length < 3) return response({ error: "REASON_REQUIRED" }, 400);
+      const updated = await rpc(env, "helix_admin_update_license", { p_license_id: id, p_actor_id: session.user.id, p_status: status, p_max_accounts: slots, p_expires_at: expiry, p_duration_days: duration, p_reason: reason.slice(0,300) });
+      if (!updated?.ok) return response({ error: updated?.error_code || "LICENSE_UPDATE_FAILED", ...(updated?.error_code === "ACTIVE_SLOTS_EXCEED_LIMIT" ? { active_slots: updated.active_slots } : {}) }, updated?.error_code === "LICENSE_NOT_FOUND" ? 404 : updated?.error_code === "ACTIVE_SLOTS_EXCEED_LIMIT" ? 409 : 400);
+      return response({ ok: true, license: updated.license });
     }
 
     if (pathname === "admin/announcements" && method === "POST") {
@@ -291,7 +411,7 @@ export async function onRequest({ request, env }) {
       const [, objectPath] = storage.split(":", 2);
       const signed = await storageRequest(env, `object/sign/helix-vip-materials/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: JSON.stringify({ expiresIn: 600 }) });
       const signedPath = signed.signedURL || signed.signedUrl;
-      const fileUrl = new URL(signedPath.startsWith("http") ? signedPath : `${SUPABASE_URL}/storage/v1${signedPath}`);
+      const fileUrl = new URL(signedPath.startsWith("http") ? signedPath : `${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/storage/v1${signedPath}`);
       fileUrl.searchParams.set("download", "");
       return response({ url: fileUrl.toString() });
     }
@@ -304,7 +424,7 @@ export async function onRequest({ request, env }) {
 
     return response({ error: "Endpoint tidak ditemukan." }, 404);
   } catch (error) {
-    console.error("HELIX VIP API error", error);
-    return response({ error: "Permintaan belum berhasil diproses. Periksa konfigurasi Supabase/Pages Functions lalu coba lagi." }, 500);
+    if (error?.status === 429) return response({ error: "RATE_LIMITED", retry_after_seconds: error.retryAfter || 60 }, 429);
+    return response({ error: "Permintaan belum berhasil diproses. Periksa konfigurasi Supabase/Pages Functions lalu coba lagi." }, error?.status === 503 ? 503 : 500);
   }
 }

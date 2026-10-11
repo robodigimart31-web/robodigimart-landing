@@ -1,0 +1,27 @@
+/* Optional drop-in skin for CURRENT source portal.css. Load AFTER /vip/portal.css.
+   Visual only: never changes auth/routing/entries; keep existing class names and JS handlers. */
+:root{--bg:var(--hx-bg);--panel:var(--hx-surface);--panel2:var(--hx-surface-2);--line:var(--hx-border);--line2:var(--hx-border-soft);--gold:var(--hx-gold);--gold2:var(--hx-gold-light);--text:var(--hx-text);--muted:var(--hx-muted);--green:var(--hx-success);--red:var(--hx-danger);--blue:#81BAFF}
+body{background:radial-gradient(ellipse at 75% 0%,rgba(143,87,7,.12),transparent 44%),var(--hx-bg);color:var(--hx-text)}
+.sidebar{background:linear-gradient(180deg,rgba(3,5,7,.98) 0%,rgba(3,5,7,.95) 36%,rgba(3,5,7,.40) 100%),url('../backgrounds/mountain-sidebar.webp') center bottom / cover no-repeat;border-right-color:rgba(211,160,50,.4)}
+.sidebar-foot{color:var(--hx-gold-light);text-shadow:0 1px 6px #000}
+.nav button svg{color:var(--hx-gold)}
+.nav button.active{color:#FFD780;background:linear-gradient(105deg,rgba(95,55,6,.84),rgba(249,179,48,.3));box-shadow:inset 0 0 0 1px #FFBD48,0 0 19px rgba(245,174,38,.40)}
+.nav button.active svg{color:#FFD770}
+.topbar{background:rgba(4,7,10,.95);border-bottom-color:#5A3E17}
+.searchbox{background:#0E151B;border-color:#37434B}
+.avatar{border-color:var(--hx-gold);box-shadow:0 0 12px #D9942A33}
+.role-pill{background:var(--hx-grad-gold)}
+.btn{border-color:var(--hx-border);background:#171A1D;color:var(--hx-gold-light)}
+.btn-primary{background:var(--hx-grad-gold);color:#1D1303;border-color:#FFDF85}
+.btn-danger{color:#FF9198;border-color:#9B343B;background:#291317}
+.btn-quiet{border-color:#3B4851;background:#11171B;color:#E5E4DD}
+.panel,.stat{border-color:rgba(236,172,40,.72);background:linear-gradient(135deg,#1C1A15 0%,#10151A 48%,#080C10 100%);box-shadow:var(--hx-shadow-panel),inset 0 0 0 1px rgba(255,220,140,.04)}
+.panel:hover,.stat:hover{border-color:var(--hx-gold);box-shadow:var(--hx-shadow-panel),0 0 13px rgba(224,155,38,.15)}
+.panel-title{color:var(--hx-gold-light)}
+.hero{border-color:#AD7924;background:linear-gradient(90deg,rgba(3,5,7,.97),rgba(3,5,7,.83) 49%,rgba(3,5,7,.15)),url('../backgrounds/mountain-hero.webp') right center / cover no-repeat}
+.status{background:#082719;color:#50F2AE;border-color:#176D4A}
+.status.warn{background:#35240B;color:#FDC264;border-color:#8A601B}
+.status.bad{background:#38121A;color:#FF8590;border-color:#90404A}
+.item-icon{border-color:#B48221;background:linear-gradient(145deg,#352710,#0D1418)}
+.brand img{filter:drop-shadow(0 0 9px #FFB02055)}
+@media(max-width:760px){.hero{background-position:center,right center}.sidebar{background-position:center,center bottom}}

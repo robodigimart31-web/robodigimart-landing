@@ -1,0 +1,16 @@
+:root,
+[data-helix-theme="gold"] {
+  --hx-bg:#050607; --hx-surface:#0F1115; --hx-surface-2:#151B21;
+  --hx-navy:#0A0F1A; --hx-gold:#F7C948; --hx-gold-light:#FFE6A0;
+  --hx-amber:#FFB020; --hx-gold-deep:#A56B12;
+  --hx-border:#71501B; --hx-border-soft:#293238;
+  --hx-text:#F5F2EB; --hx-muted:#9CA3AF;
+  --hx-success:#00D176; --hx-warning:#F59E0B; --hx-danger:#EF4444; --hx-info:#3B82F6;
+  --hx-grad-gold:linear-gradient(110deg,#FFE487 0%,#F7C948 35%,#CF8D24 100%);
+  --hx-grad-surface:linear-gradient(150deg,#15191E 0%,#0B1015 75%);
+  --hx-shadow-panel:0 8px 24px rgba(0,0,0,.44),inset 0 1px 0 rgba(255,224,135,.09);
+  --hx-shadow-gold:0 0 0 1px rgba(255,191,59,.24),0 0 18px rgba(255,175,35,.22);
+  --hx-radius-sm:6px; --hx-radius-md:9px; --hx-radius-lg:12px; --hx-radius-xl:16px;
+  --hx-font:Manrope,Inter,system-ui,-apple-system,Segoe UI,sans-serif;
+  --hx-transition:160ms ease;
+}

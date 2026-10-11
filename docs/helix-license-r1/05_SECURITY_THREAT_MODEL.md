@@ -1,0 +1,7 @@
+# Security review notes
+
+Implemented locally: verified Supabase user/role checks on protected API routes; caller-supplied member ownership is ignored; member-owned license lookup; slot lock/cap and release/audit are transactional; pairing code/session hashes are separate; public payloads bounded; service-role calls stay server-side; signing key is server-only; static UI shows no manual key; email Auth changes require approved request; hashed-subject atomic rate limiting; account login is masked in pair confirmation; no raw errors are returned to browsers.
+
+Threats requiring staging validation: missing/misconfigured RLS/grants or base functions; brute-force/DoS beyond per-subject database limits; Auth email template/redirect behavior; Pages secret leakage; Ed25519 support/EA payload canonicalization; clock drift; transaction lock behavior at concurrent slot limit; telemetry fraud by a compromised licensed terminal; mixed/reopened/netting position edge cases; event/audit coverage for existing member suspension and content edits. Add Cloudflare edge rate controls and monitor before any public activation.
+
+Performance data is informational and does not prove brokerage results. Magic allowlist is empty until the frozen `LIVE_R7_UI_CLICK_FIX` source is inspected. The existing `.dev.vars` file in sibling `helix-website/performance-worker/` was not read/copied. Treat `PUBLISHER_API_KEY` as potentially exposed and rotate it manually. Do not rotate `ACCOUNT_HASH_SALT` without an identity migration plan.
