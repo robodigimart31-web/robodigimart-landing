@@ -66,7 +66,7 @@ test('disabled performance ingest does not call the database even with a session
 
 test('member role cannot enter admin API when license features are enabled', async t => {
   const memberId='00000000-0000-4000-8000-000000000002';
-  t.mock.method(globalThis,'fetch',async url=>String(url).includes('/auth/v1/user')?Response.json({id:memberId}):Response.json([{id:memberId,email:'member@test.invalid',display_name:'Test',role:'member'}]));
+  t.mock.method(globalThis,'fetch',async url=>String(url).includes('/auth/v1/user')?Response.json({id:memberId}):String(url).includes('/helix_member_suspensions?')?Response.json([]):Response.json([{id:memberId,email:'member@test.invalid',display_name:'Test',role:'member'}]));
   const request=new Request('https://local.test/vip/api/admin/licenses',{method:'POST',headers:{authorization:'Bearer local-user-token','content-type':'application/json'},body:'{}'});
   const response=await vipApi({request,env:{PORTAL_LICENSE_MANAGEMENT_ENABLED:'true',SUPABASE_SERVICE_ROLE_KEY:'local-test-key'}});
   assert.equal(response.status,403);assert.equal((await response.json()).error,'Akses admin diperlukan.');
@@ -76,6 +76,7 @@ test('member role changes require a verified admin and call the audited role RPC
   const actor='00000000-0000-4000-8000-000000000010',target='00000000-0000-4000-8000-000000000011';let rpcArgs;
   t.mock.method(globalThis,'fetch',async (url,options)=>{
     if(String(url).includes('/auth/v1/user'))return Response.json({id:actor});
+    if(String(url).includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);
     if(String(url).includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);
     if(String(url).includes('/rest/v1/rpc/helix_admin_set_member_role')){rpcArgs=JSON.parse(options.body);return Response.json({ok:true,role:'admin'});}
     throw new Error(`Unexpected request: ${url}`);
@@ -83,6 +84,77 @@ test('member role changes require a verified admin and call the audited role RPC
   const request=new Request(`https://local.test/vip/api/admin/members/${target}/role`,{method:'PATCH',headers:{authorization:'Bearer admin-session','content-type':'application/json'},body:JSON.stringify({role:'admin',reason:'Approved for operations'})});
   const response=await vipApi({request,env:{SUPABASE_SERVICE_ROLE_KEY:'test-service-key'}});
   assert.equal(response.status,200);assert.deepEqual(rpcArgs,{p_target_member_id:target,p_actor_id:actor,p_role:'admin',p_reason:'Approved for operations'});
+});
+
+test('members can update only their own validated profile display name', async t => {
+  const memberId='00000000-0000-4000-8000-000000000012';let saved;
+  t.mock.method(globalThis,'fetch',async (url,options)=>{
+    if(String(url).includes('/auth/v1/user'))return Response.json({id:memberId});
+    if(String(url).includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);
+    if(String(url).includes('/rest/v1/helix_members?')){
+      if(options.method==='PATCH'){saved=JSON.parse(options.body);return Response.json([{id:memberId,email:'member@test.invalid',display_name:saved.display_name,role:'member'}]);}
+      return Response.json([{id:memberId,email:'member@test.invalid',display_name:'Old Name',role:'member'}]);
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const request=new Request('https://local.test/vip/api/member/profile',{method:'PATCH',headers:{authorization:'Bearer member-session','content-type':'application/json'},body:JSON.stringify({display_name:'  New   Member  '})});
+  const response=await vipApi({request,env:{SUPABASE_SERVICE_ROLE_KEY:'local-test-key'}});
+  assert.equal(response.status,200);assert.equal(saved.display_name,'New Member');assert.equal((await response.json()).member.display_name,'New Member');
+});
+
+test('member portal API refuses a still-valid Auth session after the database suspension marker is set', async t => {
+  const memberId='00000000-0000-4000-8000-000000000015';
+  t.mock.method(globalThis,'fetch',async url=>{
+    const value=String(url);
+    if(value.includes('/auth/v1/user'))return Response.json({id:memberId});
+    if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:memberId,email:'member@test.invalid',display_name:'Member',role:'member'}]);
+    if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([{member_id:memberId}]);
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const request=new Request('https://local.test/vip/api/member',{headers:{authorization:'Bearer existing-valid-jwt'}});
+  const response=await vipApi({request,env:{SUPABASE_SERVICE_ROLE_KEY:'local-test-key'}});
+  assert.equal(response.status,403);assert.equal((await response.json()).error,'MEMBER_SUSPENDED');
+});
+
+test('pre-migration portal remains available when the suspension marker table is not installed yet', async t => {
+  const memberId='00000000-0000-4000-8000-000000000016';
+  t.mock.method(globalThis,'fetch',async (url,options)=>{
+    const value=String(url);
+    if(value.includes('/auth/v1/user'))return Response.json({id:memberId});
+    if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json({code:'PGRST205'},{status:404});
+    if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:memberId,email:'member@test.invalid',display_name:'Member',role:'member'}]);
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const request=new Request('https://local.test/vip/api/member/profile',{method:'PATCH',headers:{authorization:'Bearer existing-valid-jwt','content-type':'application/json'},body:JSON.stringify({display_name:'Updated Name'})});
+  const response=await vipApi({request,env:{SUPABASE_SERVICE_ROLE_KEY:'local-test-key'}});
+  assert.equal(response.status,200);
+});
+
+test('member and admin UI expose self name changes and use HELIX TEAM wording', async () => {
+  const member=await readFile('public/vip/index.html','utf8'),admin=await readFile('public/vip/admin/index.html','utf8'),api=await readFile('functions/vip/api/[[path]].js','utf8');
+  assert.match(member,/data-edit-profile-name/);assert.match(member,/member\/profile/);assert.match(admin,/id="edit-own-name"/);assert.match(admin,/member\/profile/);
+  for(const source of [member,admin,api]){assert.match(source,/HELIX TEAM/);assert.doesNotMatch(source,/Supabase Auth/);}
+});
+
+test('member suspend blocks license sessions through the restricted RPC before banning portal login', async t => {
+  const actor='00000000-0000-4000-8000-000000000013',target='00000000-0000-4000-8000-000000000014';const calls=[];
+  t.mock.method(globalThis,'fetch',async (url,options)=>{
+    const value=String(url);
+    if(value.includes('/auth/v1/user'))return Response.json({id:actor});
+    if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);
+    if(value.includes('/rest/v1/helix_members?'))return Response.json(value.includes(`id=eq.${actor}`)?[{id:actor,email:'admin@test.invalid',display_name:'Admin',role:'admin'}]:[{id:target,role:'member'}]);
+    if(value.includes('/rest/v1/rpc/helix_admin_set_member_suspended')){calls.push(['license',JSON.parse(options.body)]);return Response.json({ok:true,licenses_changed:1,sessions_revoked:true});}
+    if(value.includes('/auth/v1/admin/users/')){calls.push(['auth',JSON.parse(options.body)]);return Response.json({id:target});}
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const request=new Request(`https://local.test/vip/api/admin/members/${target}`,{method:'POST',headers:{authorization:'Bearer admin-session','content-type':'application/json'},body:JSON.stringify({action:'suspend',reason:'Policy violation'})});
+  const response=await vipApi({request,env:{SUPABASE_SERVICE_ROLE_KEY:'local-test-key'}});
+  assert.equal(response.status,200);assert.deepEqual(calls.map(x=>x[0]),['license','auth']);assert.equal(calls[0][1].p_member_id,target);assert.equal(calls[0][1].p_actor_id,actor);assert.equal(calls[0][1].p_suspended,true);assert.equal(calls[1][1].ban_duration,'876000h');
+});
+
+test('member suspension migration revokes sessions, snapshots active licenses, and protects the RPC', async () => {
+  const sql=await readFile('supabase/migrations/202610110003_helix_member_license_suspend.sql','utf8');
+  assert.match(sql,/helix_member_license_suspensions/);assert.match(sql,/set status='suspended',entitlement_version/);assert.match(sql,/set revoked_at=coalesce\(s\.revoked_at/);assert.match(sql,/set status=x\.prior_status/);assert.match(sql,/revoke all on function public\.helix_admin_set_member_suspended[\s\S]*grant execute[\s\S]*service_role/);
 });
 
 test('role change rejects member callers and blocks self role changes before RPC', async t => {
@@ -106,7 +178,7 @@ test('admin performance page stays gated and returns live member list without te
 
 test('admin performance groups each member by calling the existing date-filtered member summary RPC', async t => {
   const actor='00000000-0000-4000-8000-000000000010',member='00000000-0000-4000-8000-000000000011';const calls=[];
-  t.mock.method(globalThis,'fetch',async (url,options)=>{const value=String(url);if(value.includes('/auth/v1/user'))return Response.json({id:actor});if(value.includes('/rest/v1/helix_members?')&&value.includes('id=eq.'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:member,email:'member@test.invalid',display_name:'Test Member'}]);if(value.includes('/rest/v1/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rest/v1/rpc/helix_member_performance_summary')){const args=JSON.parse(options.body);calls.push(args);if(!args.p_from)return Response.json({status:'READY',total_closed_trades:10,net_pnl:500,winrate:60,profit_factor:1.5,currency:'USD'});if(args.p_from==='2026-10-04T17:00:00.000Z')return Response.json({status:'READY',net_pnl:20,currency:'USD'});if(args.p_from==='2026-09-27T17:00:00.000Z')return Response.json({status:'READY',net_pnl:10,currency:'USD'});if(args.p_from==='2026-09-30T17:00:00.000Z')return Response.json({status:'READY',net_pnl:50,currency:'USD'});if(args.p_from==='2026-08-31T17:00:00.000Z')return Response.json({status:'READY',net_pnl:25,currency:'USD'});throw new Error(`Unexpected range: ${args.p_from}`)}throw new Error(`Unexpected request: ${url}`)});
+  t.mock.method(globalThis,'fetch',async (url,options)=>{const value=String(url);if(value.includes('/auth/v1/user'))return Response.json({id:actor});if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);if(value.includes('/rest/v1/helix_members?')&&value.includes('id=eq.'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:member,email:'member@test.invalid',display_name:'Test Member'}]);if(value.includes('/rest/v1/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rest/v1/rpc/helix_member_performance_summary')){const args=JSON.parse(options.body);calls.push(args);if(!args.p_from)return Response.json({status:'READY',total_closed_trades:10,net_pnl:500,winrate:60,profit_factor:1.5,currency:'USD'});if(args.p_from==='2026-10-04T17:00:00.000Z')return Response.json({status:'READY',net_pnl:20,currency:'USD'});if(args.p_from==='2026-09-27T17:00:00.000Z')return Response.json({status:'READY',net_pnl:10,currency:'USD'});if(args.p_from==='2026-09-30T17:00:00.000Z')return Response.json({status:'READY',net_pnl:50,currency:'USD'});if(args.p_from==='2026-08-31T17:00:00.000Z')return Response.json({status:'READY',net_pnl:25,currency:'USD'});throw new Error(`Unexpected range: ${args.p_from}`)}throw new Error(`Unexpected request: ${url}`)});
   const request=new Request('https://local.test/vip/api/admin/performance?page=1&week_start=2026-10-05&month=2026-10',{headers:{authorization:'Bearer admin-session'}});
   const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'true',EA_R7_TELEMETRY_READY:'true',SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret}}),data=await response.json();
   assert.equal(response.status,200,JSON.stringify(data));const summary=data.summaries[0];assert.equal(calls.length,5);assert.ok(calls.every(x=>x.p_member_id===member));assert.equal(summary.lifetime.net_pnl,500);assert.equal(summary.weekly.net_pnl,20);assert.equal(summary.weekly.growth_pct,100);assert.equal(summary.monthly.net_pnl,50);assert.equal(summary.monthly.growth_pct,100);

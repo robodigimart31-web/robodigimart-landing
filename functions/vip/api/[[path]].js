@@ -45,6 +45,10 @@ async function requireUser(request, env, admin = false) {
   const rows = await supabase(env, `helix_members?id=eq.${encodeURIComponent(user.id)}&select=id,email,display_name,role`);
   const member = rows?.[0];
   if (!member) return { error: response({ error: "Profil member belum tersedia." }, 403) };
+  let suspensions = [];
+  try { suspensions = await supabase(env, `helix_member_suspensions?member_id=eq.${encodeURIComponent(user.id)}&select=member_id&limit=1`); }
+  catch (error) { if (!error?.message?.includes("DATABASE_HTTP_404") && !error?.message?.includes("Database request failed (404)")) throw error; }
+  if (suspensions.length) return { error: response({ error: "MEMBER_SUSPENDED", message: "Akses akun HELIX ini sedang disuspend. Hubungi HELIX TEAM." }, 403) };
   if (admin && member.role !== "admin") return { error: response({ error: "Akses admin diperlukan." }, 403) };
   return { user, member };
 }
@@ -106,7 +110,7 @@ export async function onRequest({ request, env }) {
     if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
     if (otpRoute && env.PORTAL_OTP_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
     if (performanceRoute && (env.PORTAL_PERFORMANCE_ENABLED !== "true" || env.EA_R7_TELEMETRY_READY !== "true")) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
-    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname === "member/performance" || pathname.startsWith("admin/email-change-requests");
+    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname === "member/performance" || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests");
     const earlySession = earlyAuthRoute ? await verifiedUser(request, env, pathname.startsWith("admin/")) : null;
     if (earlySession?.error) return earlySession.error;
     const isMultipart = request.headers.get("content-type")?.includes("multipart/form-data");
@@ -135,6 +139,15 @@ export async function onRequest({ request, env }) {
       let emailChangeRequests = [];
       try { emailChangeRequests = await supabase(env, `helix_email_change_requests?member_id=eq.${id}&select=id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&order=created_at.desc&limit=20`); } catch { /* migration pending: keep existing member pages available */ }
       return response({ member: session.member, licenses, bindings, events, announcements, materials, emailChangeRequests });
+    }
+
+    if (pathname === "member/profile" && method === "PATCH") {
+      const session = earlySession;
+      const displayName = String(json.display_name || "").trim().replace(/\s+/g, " ");
+      if (displayName.length < 2 || displayName.length > 80 || /[\u0000-\u001f\u007f]/.test(displayName)) return response({ error: "Nama harus 2–80 karakter dan tidak boleh berisi karakter kontrol." }, 400);
+      const updated = await supabase(env, `helix_members?id=eq.${encodeURIComponent(session.user.id)}&select=id,email,display_name,role`, { method: "PATCH", body: { display_name: displayName } });
+      if (!updated?.[0]) return response({ error: "Profil member tidak ditemukan." }, 404);
+      return response({ ok: true, member: updated[0] });
     }
 
     if (pathname === "member/pairings/lookup" && method === "POST") {
@@ -347,11 +360,29 @@ export async function onRequest({ request, env }) {
         const rows = await supabase(env, `helix_members?id=eq.${encodeURIComponent(id)}&select=email`);
         if (!rows.length) return response({ error: "Member tidak ditemukan." }, 404);
         await adminAuth(env, `recover?redirect_to=${encodeURIComponent(`${portalBaseUrl(env)}/vip/login?flow=recovery`)}`, "POST", { email: rows[0].email, gotrue_meta_security: {} });
-        return response({ ok: true, message: "Link reset password dikirim lewat Supabase Auth." });
+        return response({ ok: true, message: "Link reset password dikirim lewat HELIX TEAM." });
       }
       if (json.action === "suspend" || json.action === "unsuspend") {
-        await adminAuth(env, `admin/users/${encodeURIComponent(id)}`, "PUT", { ban_duration: json.action === "suspend" ? "876000h" : "none" });
-        return response({ ok: true });
+        const target = await supabase(env, `helix_members?id=eq.${encodeURIComponent(id)}&select=id,role`);
+        if (!target.length) return response({ error: "Member tidak ditemukan." }, 404);
+        if (target[0].role === "admin") return response({ error: "Akun admin tidak dapat disuspend dari menu Member." }, 400);
+        const reason = String(json.reason || "").trim();
+        if (reason.length < 3 || reason.length > 300) return response({ error: "Alasan suspend/pemulihan wajib diisi (3–300 karakter)." }, 400);
+        const suspended = json.action === "suspend";
+        let licenseResult;
+        try {
+          licenseResult = await rpc(env, "helix_admin_set_member_suspended", { p_member_id: id, p_actor_id: session.user.id, p_suspended: suspended, p_reason: reason });
+        } catch (error) {
+          if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "MEMBER_ACCESS_MIGRATION_REQUIRED", message: "Blokir license dan sesi EA belum tersedia. Terapkan migration 202610110003_helix_member_license_suspend.sql terlebih dahulu." }, 503);
+          throw error;
+        }
+        if (!licenseResult?.ok) return response({ error: licenseResult?.error_code || "MEMBER_ACCESS_UPDATE_FAILED" }, 400);
+        try {
+          await adminAuth(env, `admin/users/${encodeURIComponent(id)}`, "PUT", { ban_duration: suspended ? "876000h" : "none" });
+        } catch (error) {
+          return response({ error: "LICENSE_ACCESS_UPDATED_AUTH_UPDATE_FAILED", message: suspended ? "License dan sesi EA sudah diblokir, tetapi pemblokiran login portal gagal. Coba ulangi tindakan suspend." : "License sudah dipulihkan dan sesi lama dicabut, tetapi pemulihan login portal gagal. Periksa status akun Auth." }, 503);
+        }
+        return response({ ok: true, licenses_changed: licenseResult.licenses_changed, sessions_revoked: licenseResult.sessions_revoked });
       }
     }
 
@@ -506,6 +537,6 @@ export async function onRequest({ request, env }) {
     return response({ error: "Endpoint tidak ditemukan." }, 404);
   } catch (error) {
     if (error?.status === 429) return response({ error: "RATE_LIMITED", retry_after_seconds: error.retryAfter || 60 }, 429);
-    return response({ error: "Permintaan belum berhasil diproses. Periksa konfigurasi Supabase/Pages Functions lalu coba lagi." }, error?.status === 503 ? 503 : 500);
+    return response({ error: "Permintaan belum berhasil diproses. Periksa konfigurasi HELIX TEAM/Pages Functions lalu coba lagi." }, error?.status === 503 ? 503 : 500);
   }
 }

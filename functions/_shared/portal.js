@@ -69,6 +69,10 @@ export async function verifiedUser(request, env, admin = false) {
   const rows = await db(env, `helix_members?id=eq.${encodeURIComponent(user.id)}&select=id,email,display_name,role`);
   const member = rows?.[0];
   if (!member) return { error: json({ error: "MEMBER_NOT_FOUND" }, 403) };
+  let suspensions = [];
+  try { suspensions = await db(env, `helix_member_suspensions?member_id=eq.${encodeURIComponent(user.id)}&select=member_id&limit=1`); }
+  catch (error) { if (error?.message !== "DATABASE_HTTP_404") throw error; }
+  if (suspensions.length) return { error: json({ error: "MEMBER_SUSPENDED", message: "Akses akun HELIX ini sedang disuspend. Hubungi HELIX TEAM." }, 403) };
   if (admin && member.role !== "admin") return { error: json({ error: "ADMIN_REQUIRED" }, 403) };
   return { user, member };
 }
