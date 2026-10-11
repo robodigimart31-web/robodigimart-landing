@@ -225,7 +225,7 @@ declare v_license public.helix_licenses; v_binding public.helix_license_bindings
 begin
   select * into v_license from public.helix_licenses where id=p_license for update;
   if not found or v_license.status<>'active' or v_license.expires_at is null or v_license.expires_at<=now() then raise exception 'LICENSE_NOT_ACTIVE'; end if;
-  v_fp:=encode(digest(lower(trim(p_server))||':'||trim(p_login),'sha256'),'hex');
+  v_fp:=encode(extensions.digest(lower(trim(p_server))||':'||trim(p_login),'sha256'),'hex');
   select * into v_binding from public.helix_license_bindings where license_id=p_license and account_fingerprint=v_fp for update;
   if found and v_binding.released_at is not null then
     select count(*) into v_slots from public.helix_license_bindings where license_id=p_license and released_at is null;
