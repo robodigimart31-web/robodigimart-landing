@@ -103,7 +103,7 @@ export async function onRequest({ request, env }) {
     const otpRoute = pathname.startsWith("member/pairings/");
     const performanceRoute = pathname === "member/performance";
     if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
-    if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Perubahan email menunggu migrasi database dan Auth terverifikasi." }, 503);
+    if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
     if (otpRoute && env.PORTAL_OTP_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
     if (performanceRoute && (env.PORTAL_PERFORMANCE_ENABLED !== "true" || env.EA_R7_TELEMETRY_READY !== "true")) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
     const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname === "member/performance" || pathname.startsWith("admin/email-change-requests");
