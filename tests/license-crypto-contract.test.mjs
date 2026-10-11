@@ -64,7 +64,13 @@ test("wrong public key fails signature verification", () => {
 });
 
 test("expired entitlement is rejected", () => {
-  const claims = canonicalEntitlementPayload({ ...fixture(), license_expires_at: "2026-10-10T00:00:00Z" });
+  const claims = canonicalEntitlementPayload({
+    ...fixture(),
+    license_expires_at: "2026-10-10T00:00:00Z",
+    issued_at: "2026-10-09T00:00:00Z",
+    server_time: "2026-10-09T00:00:00Z",
+    offline_expires_at: "2026-10-10T00:00:00Z",
+  });
   assert.equal(validateEntitlementPolicy(claims, expected, Date.parse("2026-10-11T14:00:00Z")), "LICENSE_EXPIRED");
 });
 
