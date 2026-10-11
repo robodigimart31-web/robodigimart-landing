@@ -96,20 +96,20 @@ test('role change rejects member callers and blocks self role changes before RPC
   assert.equal((await vipApi({request:selfRequest,env:{SUPABASE_SERVICE_ROLE_KEY:'test'}})).status,400);assert.equal(rpcCalls,0);
 });
 
-test('admin member performance summary stays closed until EA telemetry is verified', async t => {
+test('admin performance page stays gated and returns live member list without telemetry queries', async t => {
   const actor='00000000-0000-4000-8000-000000000010';let rpcCalls=0;
-  t.mock.method(globalThis,'fetch',async url=>{if(String(url).includes('/auth/v1/user'))return Response.json({id:actor});if(String(url).includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(String(url).includes('/rpc/helix_admin_member_performance_summary'))rpcCalls++;return Response.json([])});
-  const request=new Request('https://local.test/vip/api/admin/member-performance',{headers:{authorization:'Bearer admin-session'}});
-  const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'false',EA_R7_TELEMETRY_READY:'false',SUPABASE_SERVICE_ROLE_KEY:'test'}});
-  assert.equal(response.status,200);assert.equal((await response.json()).status,'WAITING_FOR_EA_R7');assert.equal(rpcCalls,0);
+  t.mock.method(globalThis,'fetch',async url=>{const value=String(url);if(value.includes('/auth/v1/user'))return Response.json({id:actor});if(value.includes('/rest/v1/helix_members?')&&value.includes('id=eq.'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:'00000000-0000-4000-8000-000000000011',email:'member@test.invalid',display_name:'Test Member'}]);if(value.includes('/rpc/helix_member_performance_summary'))rpcCalls++;return Response.json([])});
+  const request=new Request('https://local.test/vip/api/admin/performance?page=1&week_start=2026-10-05&month=2026-10',{headers:{authorization:'Bearer admin-session'}});
+  const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'false',EA_R7_TELEMETRY_READY:'false',SUPABASE_SERVICE_ROLE_KEY:'test'}}),data=await response.json();
+  assert.equal(response.status,200);assert.equal(data.status,'WAITING_FOR_EA_R7');assert.equal(data.members[0].email,'member@test.invalid');assert.equal(rpcCalls,0);
 });
 
-test('admin performance summary uses verified admin identity and migration RPC', async t => {
-  const actor='00000000-0000-4000-8000-000000000010';let rpcArgs;
-  t.mock.method(globalThis,'fetch',async (url,options)=>{if(String(url).includes('/auth/v1/user'))return Response.json({id:actor});if(String(url).includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(String(url).includes('/rest/v1/rpc/helix_admin_member_performance_summary')){rpcArgs=JSON.parse(options.body);return Response.json({ok:true,status:'READY',members:[{member_id:'m1',status:'READY',net_profit:42,winrate:75,profit_factor:2.5}]})}throw new Error(`Unexpected request: ${url}`)});
-  const request=new Request('https://local.test/vip/api/admin/member-performance',{headers:{authorization:'Bearer admin-session'}});
-  const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'true',EA_R7_TELEMETRY_READY:'true',SUPABASE_SERVICE_ROLE_KEY:'test'}});
-  assert.equal(response.status,200);assert.deepEqual(rpcArgs,{p_actor_id:actor});assert.equal((await response.json()).members[0].profit_factor,2.5);
+test('admin performance groups each member by calling the existing date-filtered member summary RPC', async t => {
+  const actor='00000000-0000-4000-8000-000000000010',member='00000000-0000-4000-8000-000000000011';const calls=[];
+  t.mock.method(globalThis,'fetch',async (url,options)=>{const value=String(url);if(value.includes('/auth/v1/user'))return Response.json({id:actor});if(value.includes('/rest/v1/helix_members?')&&value.includes('id=eq.'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:member,email:'member@test.invalid',display_name:'Test Member'}]);if(value.includes('/rest/v1/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rest/v1/rpc/helix_member_performance_summary')){const args=JSON.parse(options.body);calls.push(args);if(!args.p_from)return Response.json({status:'READY',total_closed_trades:10,net_pnl:500,winrate:60,profit_factor:1.5,currency:'USD'});if(args.p_from==='2026-10-04T17:00:00.000Z')return Response.json({status:'READY',net_pnl:20,currency:'USD'});if(args.p_from==='2026-09-27T17:00:00.000Z')return Response.json({status:'READY',net_pnl:10,currency:'USD'});if(args.p_from==='2026-09-30T17:00:00.000Z')return Response.json({status:'READY',net_pnl:50,currency:'USD'});if(args.p_from==='2026-08-31T17:00:00.000Z')return Response.json({status:'READY',net_pnl:25,currency:'USD'});throw new Error(`Unexpected range: ${args.p_from}`)}throw new Error(`Unexpected request: ${url}`)});
+  const request=new Request('https://local.test/vip/api/admin/performance?page=1&week_start=2026-10-05&month=2026-10',{headers:{authorization:'Bearer admin-session'}});
+  const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'true',EA_R7_TELEMETRY_READY:'true',SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret}}),data=await response.json();
+  assert.equal(response.status,200,JSON.stringify(data));const summary=data.summaries[0];assert.equal(calls.length,5);assert.ok(calls.every(x=>x.p_member_id===member));assert.equal(summary.lifetime.net_pnl,500);assert.equal(summary.weekly.net_pnl,20);assert.equal(summary.weekly.growth_pct,100);assert.equal(summary.monthly.net_pnl,50);assert.equal(summary.monthly.growth_pct,100);
 });
 
 test('portal admin and member source use only branded dialogs for actions and contain no native popup calls', async () => {
@@ -121,9 +121,17 @@ test('portal admin and member source use only branded dialogs for actions and co
   new vm.Script(ui,{filename:'helix-ui.js'});
 });
 
-test('admin member menu includes live performance columns and aggregate RPC keeps mixed currencies separate', async () => {
-  const admin=await readFile('public/vip/admin/index.html','utf8'),api=await readFile('functions/vip/api/[[path]].js','utf8'),sql=await readFile('supabase/migrations/202610110003_helix_admin_member_performance.sql','utf8');
-  assert.match(admin,/Performa Trading per Member/);assert.match(admin,/Net profit/);assert.match(admin,/Win rate/);assert.match(admin,/Profit factor/);assert.match(api,/admin\/member-performance/);assert.match(api,/EA_R7_TELEMETRY_READY/);assert.match(sql,/MIXED_CURRENCY/);assert.match(sql,/helix_admin_member_performance_summary/);assert.match(sql,/revoke all on function[\s\S]*from public,anon,authenticated/);assert.match(sql,/grant execute[\s\S]*to service_role/);
+test('admin has a dedicated paginated performance menu, existing RPC, weekly/monthly filters, and favicons', async () => {
+  const admin=await readFile('public/vip/admin/index.html','utf8'),api=await readFile('functions/vip/api/[[path]].js','utf8');
+  assert.match(admin,/\['Performance','chart'\]/);assert.match(admin,/Total profit/);assert.match(admin,/Win rate/);assert.match(admin,/Profit factor/);assert.match(admin,/performance-week/);assert.match(admin,/performance-month/);assert.match(api,/admin\/performance/);assert.match(api,/helix_member_performance_summary/);assert.doesNotMatch(api,/helix_admin_member_performance_summary/);
+  for(const path of ['public/vip/index.html','public/vip/admin/index.html','public/vip/admin.html','public/vip/login.html','public/vip/login/index.html'])assert.match(await readFile(path,'utf8'),/rel="icon" type="image\/svg\+xml" href="\/vip\/favicon\.svg"/);
+  await access('public/vip/favicon.svg');
+});
+
+test('VIP/Admin source contains no mojibake control bytes or common UTF-8 decoding artifacts', async () => {
+  for(const path of ['public/vip/index.html','public/vip/admin/index.html','public/vip/admin.html','public/vip/login.html','public/vip/login/index.html','public/vip/helix-ui/js/portal-r1.js','public/vip/helix-ui/js/helix-ui.js']){
+    const source=await readFile(path,'utf8');assert.doesNotMatch(source,/[\u0080-\u009f]/,`${path} contains an invalid C1 control character`);assert.doesNotMatch(source,/(?:\u00c3[\u0080-\u00ff]|\u00c2[\u0080-\u00ff]|\u00e2(?:\u20ac|\u2013|\u2020)|\u00ef\u00bc)/,`${path} contains mojibake`);
+  }
 });
 
 test('pair poll and telemetry reject missing session proof before database access', async t => {
@@ -134,14 +142,14 @@ test('pair poll and telemetry reject missing session proof before database acces
   assert.equal(calls,0);
 });
 
-test('all portal inline scripts parse and the existing 7/5 menu inventory remains', async () => {
+test('all portal inline scripts parse and the existing 7 member menus plus 6 admin menus remain', async () => {
   for (const path of ['public/vip/index.html','public/vip/admin/index.html','public/vip/login.html','public/vip/login/index.html']) {
     const html=await readFile(path,'utf8');let count=0;
     for (const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) if (match[1].trim()) new vm.Script(match[1],{filename:path+':inline'+(++count)});
   }
   const member=await readFile('public/vip/index.html','utf8'),admin=await readFile('public/vip/admin/index.html','utf8');
   assert.equal((member.match(/\['(?:dashboard|licenses|accounts|activity|announcements|materials|profile)'/g)||[]).length,7);
-  assert.equal((admin.match(/\['(?:Dashboard|Member|License|Announcement|Material)'/g)||[]).length,5);
+  assert.equal((admin.match(/\['(?:Dashboard|Member|Performance|License|Announcement|Material)'/g)||[]).length,6);
 });
 
 test('R1 UI scripts parse and shipped assets exist', async () => {

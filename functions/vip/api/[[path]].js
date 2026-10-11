@@ -240,18 +240,68 @@ export async function onRequest({ request, env }) {
     const session = await requireUser(request, env, pathname.startsWith("admin/"));
     if (session.error) return session.error;
 
-    if (pathname === "admin/member-performance" && method === "GET") {
-      if (env.PORTAL_PERFORMANCE_ENABLED !== "true" || env.EA_R7_TELEMETRY_READY !== "true") {
-        return response({ status: "WAITING_FOR_EA_R7", members: [], message: "Ringkasan performa menunggu kontrak EA/telemetry diverifikasi dan fitur diaktifkan." });
-      }
-      try {
-        const result = await rpc(env, "helix_admin_member_performance_summary", { p_actor_id: session.user.id });
-        if (!result?.ok) return response({ error: result?.error_code || "ADMIN_PERFORMANCE_SUMMARY_FAILED" }, 403);
-        return response({ status: result.status, members: result.members || [] });
-      } catch (error) {
-        if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "ADMIN_PERFORMANCE_MIGRATION_REQUIRED", message: "Migration helix_admin_member_performance belum diterapkan di Supabase." }, 503);
+    if (pathname === "admin/performance" && method === "GET") {
+      const requestedPage = Number(url.searchParams.get("page") || 1);
+      if (!Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > 1000) return response({ error: "INVALID_PAGE" }, 400);
+      const page = requestedPage;
+      const pageSize = 20;
+      let weekStartValue = url.searchParams.get("week_start") || new Date(Date.now() - ((new Date().getUTCDay() + 6) % 7) * 86400000).toISOString().slice(0, 10);
+      const monthValue = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+      const monthPattern = /^\d{4}-(0[1-9]|1[0-2])$/;
+      const parsedWeekDate = new Date(`${weekStartValue}T00:00:00Z`);
+      if (!datePattern.test(weekStartValue) || !monthPattern.test(monthValue) || Number.isNaN(parsedWeekDate.getTime()) || parsedWeekDate.toISOString().slice(0, 10) !== weekStartValue) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const selectedWeekDate = new Date(`${weekStartValue}T00:00:00Z`);
+      selectedWeekDate.setUTCDate(selectedWeekDate.getUTCDate() - ((selectedWeekDate.getUTCDay() + 6) % 7));
+      weekStartValue = selectedWeekDate.toISOString().slice(0, 10);
+      const weekStart = new Date(`${weekStartValue}T00:00:00+07:00`);
+      const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+      const priorWeekStart = new Date(weekStart.getTime() - 7 * 86400000);
+      const monthStart = new Date(`${monthValue}-01T00:00:00+07:00`);
+      const [monthYear, monthNumber] = monthValue.split("-").map(Number);
+      const monthEnd = new Date(Date.UTC(monthYear, monthNumber, 1) - 7 * 3600000);
+      const priorMonthStart = new Date(Date.UTC(monthYear, monthNumber - 2, 1) - 7 * 3600000);
+      const monthFrom = date => date.toISOString();
+      const performanceEnabled = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+      if (performanceEnabled) await rateLimit(request, env, "admin_performance", session.user.id, 10, 60);
+      const members = await supabase(env, `helix_members?role=eq.member&select=id,email,display_name,created_at&order=created_at.desc&limit=1000`);
+      const total = members.length;
+      const pageMembers = members.slice((page - 1) * pageSize, page * pageSize);
+      const base = { members: pageMembers, page, page_size: pageSize, total_members: total, total_pages: Math.max(1, Math.ceil(total / pageSize)), week_start: weekStartValue, month: monthValue };
+      if (!performanceEnabled) return response({ ...base, status: "WAITING_FOR_EA_R7", summaries: [], message: "Performa menunggu verifikasi EA dan aktivasi telemetry. Daftar member tetap live; tidak ada angka simulasi." });
+
+      const windowSummary = (memberId, from, to) => rpc(env, "helix_member_performance_summary", { p_member_id: memberId, p_license_id: null, p_binding_id: null, p_from: from, p_to: to, p_family: null });
+      const work = [...pageMembers];
+      const summaries = [];
+      const workers = Array.from({ length: Math.min(4, work.length) }, async () => {
+        while (work.length) {
+          const member = work.shift();
+          const [all, week, previousWeek, month, previousMonth] = await Promise.all([
+            windowSummary(member.id, null, null),
+            windowSummary(member.id, monthFrom(weekStart), monthFrom(weekEnd)),
+            windowSummary(member.id, monthFrom(priorWeekStart), monthFrom(weekStart)),
+            windowSummary(member.id, monthFrom(monthStart), monthFrom(monthEnd)),
+            windowSummary(member.id, monthFrom(priorMonthStart), monthFrom(monthStart)),
+          ]);
+          const growth = (current, previous) => {
+            if (current.status === "MIXED_CURRENCY" || previous.status === "MIXED_CURRENCY") return { status: "MIXED_CURRENCY", net_pnl: null, growth_pct: null, currency: null };
+            const currentPnl = current.status === "READY" ? Number(current.net_pnl) : 0;
+            const previousPnl = previous.status === "READY" ? Number(previous.net_pnl) : 0;
+            const currency = current.currency || previous.currency || null;
+            if (current.currency && previous.currency && current.currency !== previous.currency) return { status: "MIXED_CURRENCY", net_pnl: null, growth_pct: null, currency: null };
+            if (!currency) return { status: "NO_DATA", net_pnl: null, growth_pct: null, currency: null };
+            const growthPct = previousPnl === 0 ? (currentPnl === 0 ? 0 : null) : Math.round(((currentPnl - previousPnl) / Math.abs(previousPnl)) * 10000) / 100;
+            return { status: "READY", net_pnl: currentPnl, growth_pct: growthPct, currency };
+          };
+          summaries.push({ member_id: member.id, lifetime: all, weekly: growth(week, previousWeek), monthly: growth(month, previousMonth) });
+        }
+      });
+      try { await Promise.all(workers); }
+      catch (error) {
+        if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "MEMBER_PERFORMANCE_FUNCTION_MISSING", message: "Fungsi helix_member_performance_summary belum ada. Verifikasi penerapan migration telemetry dasar sebelum melanjutkan." }, 503);
         throw error;
       }
+      return response({ ...base, status: "READY", summaries });
     }
 
     if (pathname === "admin/members" && method === "POST") {
