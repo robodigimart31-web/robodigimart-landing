@@ -95,6 +95,17 @@ test('R1 UI scripts parse and shipped assets exist', async () => {
   for (const path of ['public/vip/helix-ui/css/tokens.css','public/vip/helix-ui/css/components.css','public/vip/helix-ui/css/portal-adapter.css','public/vip/helix-ui/css/portal-r1.css','public/vip/helix-ui/backgrounds/mountain-hero.webp','public/vip/helix-ui/backgrounds/mountain-sidebar.webp','public/vip/helix-ui/icons/home.svg','public/vip/helix-ui/icons/key.svg']) await access(path);
 });
 
+test('member, admin, and login shells use the supplied HELIX brand and SVG assets', async () => {
+  for (const path of ['public/vip/index.html','public/vip/admin/index.html','public/vip/login.html','public/vip/login/index.html']) {
+    const html=await readFile(path,'utf8');
+    assert.match(html,/\/vip\/helix-ui\/brand\/helix-emblem\.webp/);
+    assert.doesNotMatch(html,/src="\/images\/helix-emblem\.webp"/);
+  }
+  const css=await readFile('public/vip/helix-ui/css/portal-r1.css','utf8');
+  assert.match(css,/\.login-logo>img/);
+  assert.match(css,/\.role-pill img/);
+});
+
 test('license create response never returns a key or key hash', async () => {
   const sql=await readFile('supabase/migrations/202610110001_helix_otp_telemetry.sql','utf8');
   const api=await readFile('functions/vip/api/[[path]].js','utf8');
