@@ -126,6 +126,7 @@ export function canonicalEntitlementPayload(input) {
     || !Number.isSafeInteger(claims.entitlement_version) || claims.entitlement_version < 1
     || !/^[a-z][a-z0-9_]{1,47}$/.test(claims.ea_product_id || "")
     || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(claims.ea_version || "")
+    || (claims.license_scope === "product" && claims.allowed_products === "all")
     || issuedAt > serverTime || offlineExpiry < issuedAt
     || (claims.license_expires_at !== null && offlineExpiry > Date.parse(claims.license_expires_at))) {
     throw Object.assign(new Error("INVALID_ENTITLEMENT_CLAIMS"), { status: 422 });

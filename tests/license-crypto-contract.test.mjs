@@ -90,4 +90,5 @@ test("unregistered product, wrong product/version and older entitlement are reje
   assert.equal(validateEntitlementPolicy(claims, { ...expected, ea_product_id: "helix_future" }, Date.parse("2026-10-11T14:00:00Z")), "PRODUCT_NOT_ALLOWED");
   assert.equal(validateEntitlementPolicy(claims, { ...expected, ea_version: "9.9" }, Date.parse("2026-10-11T14:00:00Z")), "EA_VERSION_NOT_ALLOWED");
   assert.equal(validateEntitlementPolicy({ ...claims, entitlement_version: 2 }, expected, Date.parse("2026-10-11T14:00:00Z")), "STALE_ENTITLEMENT");
+  assert.throws(() => canonicalEntitlementPayload({ ...fixture(), license_scope: "product", allowed_products: "all" }), /INVALID_ENTITLEMENT_CLAIMS/);
 });
