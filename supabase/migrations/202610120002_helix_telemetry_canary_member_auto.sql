@@ -1,4 +1,4 @@
-begin;
+﻿begin;
 
 -- Canary grants belong to the member who owns an approved canary binding. This lets that member's future real/demo bindings inherit the time-limited canary grant.
 create or replace function public.helix_is_telemetry_canary_member(p_member_id uuid)

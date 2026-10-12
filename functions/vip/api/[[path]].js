@@ -214,7 +214,7 @@ export async function onRequest({ request, env }) {
     if (pathname === "member/profile" && method === "PATCH") {
       const session = earlySession;
       const displayName = String(json.display_name || "").trim().replace(/\s+/g, " ");
-      if (displayName.length < 2 || displayName.length > 80 || /[\u0000-\u001f\u007f]/.test(displayName)) return response({ error: "Nama harus 2-80 karakter dan tidak boleh berisi karakter kontrol." }, 400);
+      if (displayName.length < 2 || displayName.length > 80 || /[\u0000-\u001f\u007f]/.test(displayName)) return response({ error: "Nama harus 2–80 karakter dan tidak boleh berisi karakter kontrol." }, 400);
       const updated = await supabase(env, `helix_members?id=eq.${encodeURIComponent(session.user.id)}&select=id,email,display_name,role`, { method: "PATCH", body: { display_name: displayName } });
       if (!updated?.[0]) return response({ error: "Profil member tidak ditemukan." }, 404);
       return response({ ok: true, member: updated[0] });
@@ -305,7 +305,7 @@ export async function onRequest({ request, env }) {
           metrics: { ...metrics, last_sync_at: latestTelemetrySync.get(binding.id) || null },
         };
       }));
-      return response({ status: performanceGlobal ? "READY" : performanceCanary ? "CANARY" : "WAITING_FOR_EA_R7", accounts, currency_rates: fxDisplay, from, to: toValue, earliest_supported_date: "2026-09-01T00:00:00", message: performanceGlobal ? null : "Performance Global masih OFF. Seluruh akun milik member canary yang diizinkan-demo maupun real-termasuk binding baru dicakup selama grant canary berlaku." });
+      return response({ status: performanceGlobal ? "READY" : performanceCanary ? "CANARY" : "WAITING_FOR_EA_R7", accounts, currency_rates: fxDisplay, from, to: toValue, earliest_supported_date: "2026-09-01T00:00:00", message: performanceGlobal ? null : "Performance Global masih OFF. Seluruh akun milik member canary yang diizinkan—demo maupun real—termasuk binding baru dicakup selama grant canary berlaku." });
     }
 
     if (pathname === "member/performance" && method === "GET") {
@@ -603,7 +603,7 @@ export async function onRequest({ request, env }) {
       const reason = String(json.reason || "").trim();
       if (!/^[0-9a-f-]{36}$/i.test(targetId) || !["admin", "member"].includes(role)) return response({ error: "INVALID_ROLE_CHANGE" }, 400);
       if (targetId === session.user.id) return response({ error: "SELF_ROLE_CHANGE_BLOCKED", message: "Role akun yang sedang digunakan tidak dapat diubah dari sesi ini." }, 400);
-      if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan perubahan wajib diisi (3-300 karakter)." }, 400);
+      if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan perubahan wajib diisi (3–300 karakter)." }, 400);
       try {
         const result = await rpc(env, "helix_admin_set_member_role", { p_target_member_id: targetId, p_actor_id: session.user.id, p_role: role, p_reason: reason });
         if (!result?.ok) return response({ error: result?.error_code || "ROLE_CHANGE_FAILED" }, result?.error_code === "MEMBER_NOT_FOUND" ? 404 : 400);
@@ -637,7 +637,7 @@ export async function onRequest({ request, env }) {
         if (!target.length) return response({ error: "Member tidak ditemukan." }, 404);
         if (target[0].role === "admin") return response({ error: "Akun admin tidak dapat disuspend dari menu Member." }, 400);
         const reason = String(json.reason || "").trim();
-        if (reason.length < 3 || reason.length > 300) return response({ error: "Alasan suspend/pemulihan wajib diisi (3-300 karakter)." }, 400);
+        if (reason.length < 3 || reason.length > 300) return response({ error: "Alasan suspend/pemulihan wajib diisi (3–300 karakter)." }, 400);
         const suspended = json.action === "suspend";
         let licenseResult;
         try {
@@ -664,7 +664,7 @@ export async function onRequest({ request, env }) {
       if (!memberRows.length) return response({ error: "Buat/invite member lebih dulu sebelum membuat license." }, 400);
       const expiryDays = json.expiry_days === undefined ? 730 : Number(json.expiry_days);
       const maxAccounts = json.max_accounts === undefined ? 5 : Number(json.max_accounts);
-      if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 3650 || !Number.isInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 5) return response({ error: "Masa aktif harus 1-3650 hari dan slot harus 1-5." }, 400);
+      if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 3650 || !Number.isInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 5) return response({ error: "Masa aktif harus 1–3650 hari dan slot harus 1–5." }, 400);
       if (String(json.product_slug || "quadriga") !== "quadriga") return response({ error: "Produk license belum tersedia." }, 400);
       const internalLegacyValue = randomKey();
       const hash = await digest(internalLegacyValue);
@@ -678,7 +678,7 @@ export async function onRequest({ request, env }) {
       if (json.action === "delete") {
         if (!/^[0-9a-f-]{36}$/i.test(id)) return response({ error: "LICENSE_NOT_FOUND" }, 404);
         const reason = String(json.reason || "").trim();
-        if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan penghapusan wajib diisi (3-300 karakter)." }, 400);
+        if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan penghapusan wajib diisi (3–300 karakter)." }, 400);
         try {
           const deleted = await rpc(env, "helix_admin_delete_license", { p_license_id: id, p_actor_id: session.user.id, p_reason: reason });
           if (!deleted?.ok) return response({ error: deleted?.error_code || "LICENSE_DELETE_FAILED" }, deleted?.error_code === "LICENSE_NOT_FOUND" ? 404 : 400);
