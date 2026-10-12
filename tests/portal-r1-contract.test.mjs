@@ -1,10 +1,10 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import vm from 'node:vm';
 import { onRequestPost as pairStart } from '../functions/api/license/v1/pair/start.js';
 import { onRequestPost as pairPoll } from '../functions/api/license/v1/pair/poll.js';
-import { onRequestPost as telemetry } from '../functions/api/telemetry/v1/deals.js';
+import { onRequestPost as telemetry, performanceWindowStart as telemetryWindowStart } from '../functions/api/telemetry/v1/deals.js';
 import { onRequestGet as portalStatus } from '../functions/api/portal/v1/status.js';
 import { onRequest as vipApi } from '../functions/vip/api/[[path]].js';
 import { onRequest as vipHostRouting } from '../functions/_middleware.js';
@@ -62,6 +62,12 @@ test('disabled performance ingest does not call the database even with a session
   const request=new Request('https://local.test/api/telemetry/v1/deals',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+'a'.repeat(48)},body:JSON.stringify({deals:[{}]})});
   const response=await telemetry({request,env:{SUPABASE_SERVICE_ROLE_KEY:'test'}});
   assert.equal(response.status,503);assert.equal((await response.json()).feature,'trading_performance');assert.equal(calls,0);
+});
+
+test('telemetry retention is capped at six rolling months with the HELIX launch date as the floor', () => {
+  assert.equal(telemetryWindowStart(new Date('2026-10-12T00:00:00Z')),'2026-09-01');
+  assert.equal(telemetryWindowStart(new Date('2027-04-01T00:00:00Z')),'2026-10-01');
+  assert.equal(telemetryWindowStart(new Date('2027-05-01T00:00:00Z')),'2026-11-01');
 });
 
 test('member role cannot enter admin API when license features are enabled', async t => {
@@ -178,7 +184,7 @@ test('admin performance page stays gated and returns live member list without te
 
 test('admin performance groups each member by calling the existing date-filtered member summary RPC', async t => {
   const actor='00000000-0000-4000-8000-000000000010',member='00000000-0000-4000-8000-000000000011';const calls=[];
-  t.mock.method(globalThis,'fetch',async (url,options)=>{const value=String(url);if(value.includes('/auth/v1/user'))return Response.json({id:actor});if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);if(value.includes('/rest/v1/helix_members?')&&value.includes('id=eq.'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:member,email:'member@test.invalid',display_name:'Test Member'}]);if(value.includes('/rest/v1/helix_general_settings?'))return Response.json([]);if(value.includes('/rest/v1/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rest/v1/rpc/helix_member_performance_summary')){const args=JSON.parse(options.body);calls.push(args);if(!args.p_from)return Response.json({status:'READY',by_currency:[{currency:'USD',trades:10,wins:6,losses:4,break_even:0,gross_profit:600,gross_loss:100,net_pnl:500}]});if(args.p_from==='2026-10-05T00:00:00')return Response.json({status:'READY',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:20,gross_loss:0,net_pnl:20}]});if(args.p_from==='2026-09-28T00:00:00')return Response.json({status:'READY',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:10,gross_loss:0,net_pnl:10}]});if(args.p_from==='2026-10-01T00:00:00')return Response.json({status:'READY',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:50,gross_loss:0,net_pnl:50}]});if(args.p_from==='2026-09-01T00:00:00')return Response.json({status:'READY',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:25,gross_loss:0,net_pnl:25}]});throw new Error(`Unexpected range: ${args.p_from}`)}throw new Error(`Unexpected request: ${url}`)});
+  t.mock.method(globalThis,'fetch',async (url,options)=>{const value=String(url);if(value.includes('/auth/v1/user'))return Response.json({id:actor});if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);if(value.includes('/rest/v1/helix_members?')&&value.includes('id=eq.'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:member,email:'member@test.invalid',display_name:'Test Member'}]);if(value.includes('/rest/v1/helix_general_settings?'))return Response.json([]);if(value.includes('/rest/v1/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rest/v1/rpc/helix_member_performance_summary')){const args=JSON.parse(options.body);calls.push(args);if(args.p_from==='2026-09-01T00:00:00'&&!args.p_to)return Response.json({status:'READY',by_currency:[{currency:'USD',trades:10,wins:6,losses:4,break_even:0,gross_profit:600,gross_loss:100,net_pnl:500}]});if(args.p_from==='2026-09-01T00:00:00'&&args.p_to==='2026-10-01T00:00:00')return Response.json({status:'READY',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:25,gross_loss:0,net_pnl:25}]});if(args.p_from==='2026-10-05T00:00:00')return Response.json({status:'READY',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:20,gross_loss:0,net_pnl:20}]});if(args.p_from==='2026-09-28T00:00:00')return Response.json({status:'READY',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:10,gross_loss:0,net_pnl:10}]});if(args.p_from==='2026-10-01T00:00:00')return Response.json({status:'READY',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:50,gross_loss:0,net_pnl:50}]});throw new Error(`Unexpected range: ${args.p_from}`)}throw new Error(`Unexpected request: ${url}`)});
   const request=new Request('https://local.test/vip/api/admin/performance?page=1&week_start=2026-10-05&month=2026-10',{headers:{authorization:'Bearer admin-session'}});
   const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'true',EA_R7_TELEMETRY_READY:'true',SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret}}),data=await response.json();
   assert.equal(response.status,200,JSON.stringify(data));const summary=data.summaries[0];assert.equal(calls.length,5);assert.ok(calls.every(x=>x.p_member_id===member));assert.equal(summary.lifetime.net_pnl_usd,500);assert.equal(summary.weekly.net_pnl_usd,20);assert.equal(summary.weekly.growth_pct,100);assert.equal(summary.monthly.net_pnl_usd,50);assert.equal(summary.monthly.growth_pct,100);
@@ -208,6 +214,21 @@ test('admin account performance is canary-scoped and derives USD stats only from
   assert.equal(response.status,200,JSON.stringify(data));assert.equal(data.status,'CANARY');assert.equal(data.accounts.length,1);const account=data.accounts[0];assert.equal(account.mode,'demo');assert.equal(account.magic_base,681000);assert.equal(account.metrics.total_closed_trades,2);assert.equal(account.metrics.wins,1);assert.equal(account.metrics.losses,1);assert.equal(account.metrics.net_pnl_usd,8);assert.equal(account.metrics.profit_factor,5);
 });
 
+test('member account performance is ownership-scoped and labels real accounts outside the demo canary', async t => {
+  const actor='00000000-0000-4000-8000-000000000010',license='00000000-0000-4000-8000-000000000012',demo='00000000-0000-4000-8000-000000000013',real='00000000-0000-4000-8000-000000000014';let rpcBindings=[];
+  t.mock.method(globalThis,'fetch',async (url,options)=>{const value=String(url);if(value.includes('/auth/v1/user'))return Response.json({id:actor});if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'member@test.invalid',display_name:'Test Member',role:'member'}]);if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);if(value.includes('/rest/v1/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rest/v1/helix_licenses?'))return Response.json([{id:license,product_slug:'quadriga',status:'active',expires_at:'2028-10-10T00:00:00Z',license_key_hint:'••1234'}]);if(value.includes('/rest/v1/helix_license_bindings?'))return Response.json([{id:demo,license_id:license,broker_server:'Demo Broker',account_login:'12345678',mode:'demo',magic_base:681000},{id:real,license_id:license,broker_server:'Real Broker',account_login:'87654321',mode:'real',magic_base:681000}]);if(value.includes('/rest/v1/helix_license_sessions?'))return Response.json([{binding_id:demo,last_telemetry_sync_at:'2026-10-12T06:44:39Z'}]);if(value.includes('/rest/v1/helix_telemetry_canary_allowlist?'))return Response.json([{binding_id:demo}]);if(value.includes('/rest/v1/helix_general_settings?'))return Response.json([]);if(value.includes('/rest/v1/rpc/helix_member_performance_canary_summary_v2')){const args=JSON.parse(options.body);rpcBindings.push(args.p_binding_id);return Response.json({status:'READY',last_sync_at:'2026-10-12T06:44:39Z',by_currency:[{currency:'USD',trades:1,wins:1,losses:0,break_even:0,gross_profit:10,gross_loss:0,net_pnl:10}]})}throw new Error(`Unexpected request: ${url}`)});
+  const request=new Request('https://local.test/vip/api/member/performance/accounts?from=2026-09-01',{headers:{authorization:'Bearer member-session'}});
+  const response=await vipApi({request,env:{PORTAL_PERFORMANCE_ENABLED:'false',EA_R7_TELEMETRY_READY:'false',PORTAL_PERFORMANCE_CANARY_ENABLED:'true',SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret}}),data=await response.json();
+  assert.equal(response.status,200,JSON.stringify(data));assert.equal(data.accounts.length,2);assert.deepEqual(rpcBindings,[demo]);const demoRow=data.accounts.find(row=>row.mode==='demo'),realRow=data.accounts.find(row=>row.mode==='real');assert.equal(demoRow.metrics.net_pnl_usd,10);assert.equal(demoRow.metrics.total_closed_trades,1);assert.equal(realRow.capture_scope,'NOT_IN_CANARY');assert.equal(realRow.metrics.status,'NOT_IN_CANARY');assert.equal(data.from,'2026-09-01T00:00:00');
+});
+
+test('telemetry ingestion skips history earlier than the HELIX launch floor without blocking the batch', async t => {
+  let writes=0;t.mock.method(globalThis,'fetch',async url=>{if(String(url).includes('/rest/v1/rpc/helix_rate_limit'))return Response.json({allowed:true});if(String(url).includes('/rest/v1/rpc/helix_ingest_telemetry_deals_v2'))writes++;throw new Error(`Unexpected request: ${url}`)});
+  const deal={deal_ticket:'1',position_id:'1',occurred_at_broker:'2026-08-31T23:59:59',direction:'BUY',entry_kind:'IN',volume:0.1,profit:0,commission:0,swap:0,fee:0,currency:'USD',symbol:'EURUSD',magic:681001};
+  const request=new Request('https://local.test/api/telemetry/v1/deals',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+'a'.repeat(48)},body:JSON.stringify({schema_version:'2-broker-time',time_basis:'BROKER_SERVER',magic_base:681000,deals:[deal]})});
+  const response=await telemetry({request,env:{PORTAL_PERFORMANCE_CANARY_ENABLED:'true',SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret}}),data=await response.json();assert.equal(response.status,200);assert.equal(data.accepted,0);assert.equal(data.ignored_outside_window,1);assert.equal(data.minimum_broker_date,'2026-09-01');assert.equal(writes,0);
+});
+
 test('canary transaction details reject a real binding even when an admin requests its UUID', async t => {
   const actor='00000000-0000-4000-8000-000000000010',binding='00000000-0000-4000-8000-000000000013';
   t.mock.method(globalThis,'fetch',async url=>{const value=String(url);if(value.includes('/auth/v1/user'))return Response.json({id:actor});if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',role:'admin'}]);if(value.includes('/rest/v1/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rest/v1/helix_license_bindings?'))return Response.json([{id:binding,license_id:'00000000-0000-4000-8000-000000000012',mode:'real',released_at:null}]);if(value.includes('/rest/v1/helix_telemetry_canary_allowlist?'))return Response.json([]);throw new Error(`Unexpected request: ${url}`)});
@@ -235,10 +256,11 @@ test('all portal inline scripts parse and the existing 7 member menus plus 6 adm
     const html=await readFile(path,'utf8');let count=0;
     for (const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) if (match[1].trim()) new vm.Script(match[1],{filename:path+':inline'+(++count)});
   }
-  const member=await readFile('public/vip/index.html','utf8'),admin=await readFile('public/vip/admin/index.html','utf8');
+  const member=await readFile('public/vip/index.html','utf8'),memberR1=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8'),admin=await readFile('public/vip/admin/index.html','utf8');
   assert.equal((member.match(/\['(?:dashboard|licenses|accounts|activity|announcements|materials|profile)'/g)||[]).length,7);
-  assert.equal((admin.match(/\['(?:Dashboard|Member|Performance|License & Performance|Announcement|Material)'/g)||[]).length,6);
-  assert.match(admin,/Performance per akun MT5/);assert.match(admin,/data-account-performance-detail/);assert.match(admin,/License & Performance/);
+  assert.equal((admin.match(/\['(?:Dashboard|Member|Performance|License & Akun|Announcement|Material)'/g)||[]).length,6);
+  assert.match(admin,/Performance per akun MT5/);assert.match(admin,/data-account-performance-detail/);assert.match(admin,/License & Akun/);assert.match(admin,/function performancePage\(\)[\s\S]*?accountPerformancePanel\(\)/);
+  assert.match(memberR1,/Performance per akun MT5/);assert.match(memberR1,/member\/performance\/accounts/);
 });
 
 test('R1 UI scripts parse and shipped assets exist', async () => {

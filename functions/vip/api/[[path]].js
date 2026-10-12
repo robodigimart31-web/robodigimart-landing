@@ -96,6 +96,24 @@ function brokerBound(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 19) === normalized ? normalized : undefined;
 }
 
+function performanceWindowStart(now = new Date()) {
+  const sixMonths = new Date(now.getTime());
+  const day = sixMonths.getUTCDate();
+  sixMonths.setUTCDate(1);
+  sixMonths.setUTCMonth(sixMonths.getUTCMonth() - 6);
+  const lastDay = new Date(Date.UTC(sixMonths.getUTCFullYear(), sixMonths.getUTCMonth() + 1, 0)).getUTCDate();
+  sixMonths.setUTCDate(Math.min(day, lastDay));
+  const rolling = `${sixMonths.toISOString().slice(0, 10)}T00:00:00`;
+  return rolling > "2026-09-01T00:00:00" ? rolling : "2026-09-01T00:00:00";
+}
+
+function boundedPerformanceFrom(value, now = new Date()) {
+  const requested = brokerBound(value);
+  if (requested === undefined) return undefined;
+  const cutoff = performanceWindowStart(now);
+  return requested && requested > cutoff ? requested : cutoff;
+}
+
 function randomKey() {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
   const value = [...bytes].map(x => x.toString(16).padStart(2, "0").toUpperCase()).join("");
@@ -143,7 +161,7 @@ export async function onRequest({ request, env }) {
     const licenseRoute = pathname === "admin/licenses" || pathname.startsWith("admin/licenses/") || pathname.startsWith("member/bindings/");
     const emailRoute = pathname.startsWith("member/email-change-requests") || pathname.startsWith("admin/email-change-requests");
     const otpRoute = pathname.startsWith("member/pairings/");
-    const performanceRoute = pathname === "member/performance";
+    const performanceRoute = pathname === "member/performance" || pathname === "member/performance/accounts";
     if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
     if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
     if (otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
@@ -151,7 +169,7 @@ export async function onRequest({ request, env }) {
     const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
     const performanceCanary = env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
     if (performanceRoute && !performanceGlobal && !performanceCanary) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
-    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname === "member/performance" || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests") || pathname.startsWith("admin/settings");
+    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname.startsWith("member/performance") || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests") || pathname.startsWith("admin/settings");
     const earlySession = earlyAuthRoute ? await verifiedUser(request, env, pathname.startsWith("admin/")) : null;
     if (earlySession?.error) return earlySession.error;
     const isMultipart = request.headers.get("content-type")?.includes("multipart/form-data");
@@ -237,6 +255,54 @@ export async function onRequest({ request, env }) {
       return response({ ok: true, state: result.state, binding_id: result.binding_id, message: "Akun MT5 berhasil dipasangkan. EA akan menerima entitlement saat polling berikutnya." });
     }
 
+    if (pathname === "member/performance/accounts" && method === "GET") {
+      const session = earlySession;
+      await rateLimit(request, env, "member_performance_accounts", session.user.id, 20, 60);
+      const fromValue = url.searchParams.get("from");
+      const toValue = brokerBound(url.searchParams.get("to"));
+      const from = boundedPerformanceFrom(fromValue);
+      if (from === undefined || toValue === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_DATE_RANGE" }, 400);
+      const licenseRows = await supabase(env, `helix_licenses?member_id=eq.${encodeURIComponent(session.user.id)}&deleted_at=is.null&select=id,product_slug,status,expires_at,license_key_hint`);
+      const licenseById = new Map(licenseRows.map(item => [item.id, item]));
+      const licenseIds = [...licenseById.keys()];
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&released_at=is.null&select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,first_seen_at&order=first_seen_at.desc`) : [];
+      const bindingIds = bindings.map(item => item.id);
+      const [sessions, { rates, display: fxDisplay }] = await Promise.all([
+        bindingIds.length ? supabase(env, `helix_license_sessions?binding_id=in.(${bindingIds.join(",")})&select=binding_id,last_telemetry_sync_at&order=last_telemetry_sync_at.desc&limit=5000`) : Promise.resolve([]),
+        currencyUsdRates(env),
+      ]);
+      let canaryIds = new Set();
+      if (!performanceGlobal && performanceCanary && bindingIds.length) {
+        try {
+          const rows = await supabase(env, `helix_telemetry_canary_allowlist?binding_id=in.(${bindingIds.join(",")})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
+          canaryIds = new Set(rows.map(row => row.binding_id));
+        } catch { /* absent canary migration is treated as no member-visible telemetry */ }
+      }
+      const latestTelemetrySync = new Map();
+      for (const item of sessions) if (item.last_telemetry_sync_at && (!latestTelemetrySync.has(item.binding_id) || item.last_telemetry_sync_at > latestTelemetrySync.get(item.binding_id))) latestTelemetrySync.set(item.binding_id, item.last_telemetry_sync_at);
+      const accounts = await Promise.all(bindings.map(async binding => {
+        const license = licenseById.get(binding.license_id);
+        const included = performanceGlobal || (performanceCanary && binding.mode === "demo" && canaryIds.has(binding.id));
+        const metrics = included
+          ? usdMetrics(await rpc(env, performanceGlobal ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2", { p_member_id: session.user.id, p_license_id: license.id, p_binding_id: binding.id, p_from: from, p_to: toValue }), rates)
+          : { status: "NOT_IN_CANARY", total_closed_trades: 0, wins: 0, losses: 0, break_even: 0, winrate: null, profit_factor: null, net_pnl_usd: null, unsupported_currencies: [] };
+        return {
+          binding_id: binding.id,
+          license_id: binding.license_id,
+          product_slug: license.product_slug,
+          license_status: license.status,
+          broker_server: binding.broker_server,
+          account_login: binding.account_login,
+          mode: binding.mode,
+          magic_base: binding.magic_base,
+          last_telemetry_sync_at: latestTelemetrySync.get(binding.id) || null,
+          capture_scope: performanceGlobal ? "GLOBAL" : included ? "CANARY" : "NOT_IN_CANARY",
+          metrics: { ...metrics, last_sync_at: latestTelemetrySync.get(binding.id) || null },
+        };
+      }));
+      return response({ status: performanceGlobal ? "READY" : performanceCanary ? "CANARY" : "WAITING_FOR_EA_R7", accounts, currency_rates: fxDisplay, from, to: toValue, earliest_supported_date: "2026-09-01T00:00:00", message: performanceGlobal ? null : "Performance Global masih OFF. Data canary hanya ditampilkan untuk akun demo yang diizinkan; akun real belum menerima telemetry." });
+    }
+
     if (pathname === "member/performance" && method === "GET") {
       const session = earlySession;
       await rateLimit(request, env, "member_performance", session.user.id, 30, 60);
@@ -247,7 +313,7 @@ export async function onRequest({ request, env }) {
       const toValue = url.searchParams.get("to");
       const family = url.searchParams.get("family");
       if ((licenseId && !uuid.test(licenseId)) || (bindingId && !uuid.test(bindingId)) || (family && family !== "unclassified")) return response({ error: "INVALID_FILTER" }, 400);
-      const from = brokerBound(fromValue), to = brokerBound(toValue);
+      const from = boundedPerformanceFrom(fromValue), to = brokerBound(toValue);
       if ((fromValue && from === undefined) || (toValue && to === undefined) || (from && to && from >= to)) return response({ error: "INVALID_DATE_RANGE" }, 400);
       if (from && to && Date.parse(`${to}Z`) - Date.parse(`${from}Z`) > 366 * 86400000) return response({ error: "INVALID_DATE_RANGE" }, 400);
       const licenseRows = await supabase(env, `helix_licenses?member_id=eq.${encodeURIComponent(session.user.id)}&deleted_at=is.null&select=id`);
@@ -348,8 +414,9 @@ export async function onRequest({ request, env }) {
       if (![memberFilter, licenseFilter, bindingFilter].every(validId)) return response({ error: "INVALID_FILTER" }, 400);
       const fromValue = brokerBound(url.searchParams.get("from") || "2026-09-01T00:00:00");
       const toValue = brokerBound(url.searchParams.get("to"));
-      if (fromValue === undefined || toValue === undefined || (toValue && toValue <= fromValue)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
-      const from = fromValue < "2026-09-01T00:00:00" ? "2026-09-01T00:00:00" : fromValue;
+      if (fromValue === undefined || toValue === undefined) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const from = boundedPerformanceFrom(fromValue);
+      if (from === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
       let canaryIds = null;
       if (!performanceGlobal) {
         const rows = await supabase(env, `helix_telemetry_canary_allowlist?expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
@@ -408,8 +475,9 @@ export async function onRequest({ request, env }) {
       const bindingId = url.searchParams.get("binding_id"), page = Number(url.searchParams.get("page") || 1), pageSize = 50;
       if (!/^[0-9a-f-]{36}$/i.test(bindingId || "") || !Number.isInteger(page) || page < 1 || page > 10000) return response({ error: "INVALID_FILTER" }, 400);
       const fromValue = brokerBound(url.searchParams.get("from") || "2026-09-01T00:00:00"), toValue = brokerBound(url.searchParams.get("to"));
-      if (fromValue === undefined || toValue === undefined || (toValue && toValue <= fromValue)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
-      const from = fromValue < "2026-09-01T00:00:00" ? "2026-09-01T00:00:00" : fromValue;
+      if (fromValue === undefined || toValue === undefined) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const from = boundedPerformanceFrom(fromValue);
+      if (from === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
       const bindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&select=id,license_id,broker_server,account_login,mode,magic_base,released_at&limit=1`);
       const binding = bindings[0]; if (!binding || binding.released_at) return response({ error: "BINDING_NOT_FOUND" }, 404);
       if (!performanceGlobal) {
@@ -486,7 +554,7 @@ export async function onRequest({ request, env }) {
 
       const { rates: fxRates, display: fxDisplay } = await currencyUsdRates(env);
       const summaryFunction = performanceGlobalAdmin ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2";
-      const windowSummary = async (memberId, from, to) => usdMetrics(await rpc(env, summaryFunction, { p_member_id: memberId, p_license_id: filterLicense, p_binding_id: filterBinding, p_from: from, p_to: to }), fxRates);
+      const windowSummary = async (memberId, from, to) => usdMetrics(await rpc(env, summaryFunction, { p_member_id: memberId, p_license_id: filterLicense, p_binding_id: filterBinding, p_from: boundedPerformanceFrom(from), p_to: to }), fxRates);
       const work = [...pageMembers];
       const summaries = [];
       const workers = Array.from({ length: Math.min(4, work.length) }, async () => {
