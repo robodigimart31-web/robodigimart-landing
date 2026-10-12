@@ -19,7 +19,7 @@ test('pair start returns a short code and independent secret while persisting on
     if (String(url).includes('helix_pairing_start')) { inserted = body; return Response.json({ id: 'request-id', expires_at: '2026-10-11T12:10:00Z' }); }
     throw new Error('Unexpected backend request');
   });
-  const request = new Request('https://local.test/api/license/v1/pair/start', { method: 'POST', headers: { 'content-type':'application/json', origin:'https://www.robodigimart.com' }, body: JSON.stringify({ broker_server:'Demo Broker-Server', account_login:'12345678', mode:'demo' }) });
+  const request = new Request('https://local.test/api/license/v1/pair/start', { method: 'POST', headers: { 'content-type':'application/json', origin:'https://www.robodigimart.com' }, body: JSON.stringify({ broker_server:'Demo Broker-Server', account_login:'12345678', mode:'demo', protocol_version:'v2', ea_build:'unit-test', ea_product_id:'quadriga', ea_version:'1.8c' }) });
   const response = await pairStart({ request, env: { SUPABASE_URL:'https://supabase.test', SUPABASE_SERVICE_ROLE_KEY:'local-test-key', PAIRING_HASH_SECRET:secret, PORTAL_OTP_ENABLED:'true' } });
   assert.equal(response.status, 201);
   const output = await response.json();
@@ -289,6 +289,55 @@ test('released binding reactivation in OTP and legacy licensing paths enforces s
   }
   assert.equal(sql.slice(sql.indexOf('create or replace function public.helix_pairing_approve'),sql.indexOf('create or replace function public.helix_pairing_poll')),
     production.slice(production.indexOf('create or replace function public.helix_pairing_approve'),production.indexOf('create or replace function public.helix_pairing_poll')));
+});
+
+test('admin license deletion is admin-only, audited, revokes sessions, and keeps history', async t => {
+  const actor='00000000-0000-4000-8000-000000000021',license='00000000-0000-4000-8000-000000000022';
+  let rpcArgs;
+  t.mock.method(globalThis,'fetch',async (url,options)=>{
+    const value=String(url);
+    if(value.includes('/auth/v1/user'))return Response.json({id:actor});
+    if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'admin@test.invalid',display_name:'Admin',role:'admin'}]);
+    if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);
+    if(value.includes('/rest/v1/rpc/helix_admin_delete_license')){rpcArgs=JSON.parse(options.body);return Response.json({ok:true,license_id:license,sessions_revoked:2,bindings_released:1});}
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const request=new Request(`https://local.test/vip/api/admin/licenses/${license}`,{method:'PATCH',headers:{authorization:'Bearer admin-session','content-type':'application/json'},body:JSON.stringify({action:'delete',reason:'Customer requested cancellation'})});
+  const response=await vipApi({request,env:{SUPABASE_SERVICE_ROLE_KEY:'local-test-key',PORTAL_LICENSE_MANAGEMENT_ENABLED:'true'}});
+  assert.equal(response.status,200);assert.equal(rpcArgs.p_license_id,license);assert.equal(rpcArgs.p_actor_id,actor);assert.equal(rpcArgs.p_reason,'Customer requested cancellation');
+  const migration=await readFile('supabase/migrations/202610120001_helix_admin_license_delete.sql','utf8');
+  assert.match(migration,/deleted_at/);assert.match(migration,/status = 'revoked'/);assert.match(migration,/revoke_reason = coalesce\(revoke_reason, 'license_deleted'\)/);assert.match(migration,/license_deleted/);assert.match(migration,/bindings_released/);assert.match(migration,/event_type, metadata/);assert.match(migration,/ADMIN_REQUIRED/);assert.match(migration,/revoke all on function public\.helix_admin_delete_license[\s\S]*grant execute on function public\.helix_admin_delete_license[\s\S]*service_role/);
+});
+
+test('member cannot delete a license and deleted licenses are hidden from their portal', async t => {
+  const actor='00000000-0000-4000-8000-000000000023',license='00000000-0000-4000-8000-000000000024';let rpcCalls=0;
+  t.mock.method(globalThis,'fetch',async (url)=>{
+    const value=String(url);
+    if(value.includes('/auth/v1/user'))return Response.json({id:actor});
+    if(value.includes('/rest/v1/helix_members?'))return Response.json([{id:actor,email:'member@test.invalid',display_name:'Member',role:'member'}]);
+    if(value.includes('/rest/v1/helix_member_suspensions?'))return Response.json([]);
+    if(value.includes('/rpc/helix_admin_delete_license'))rpcCalls++;
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const request=new Request(`https://local.test/vip/api/admin/licenses/${license}`,{method:'PATCH',headers:{authorization:'Bearer member-session','content-type':'application/json'},body:JSON.stringify({action:'delete',reason:'Member should not do this'})});
+  const response=await vipApi({request,env:{SUPABASE_SERVICE_ROLE_KEY:'local-test-key',PORTAL_LICENSE_MANAGEMENT_ENABLED:'true'}});
+  assert.equal(response.status,403);assert.equal(rpcCalls,0);
+  const api=await readFile('functions/vip/api/[[path]].js','utf8');
+  assert.match(api,/listLicenses\(env, `member_id=eq\.\$\{id\}&deleted_at=is\.null`\)/);
+});
+
+test('member and admin portals share a 30-minute cross-tab idle sign-out', async () => {
+  const idle=await readFile('public/vip/helix-ui/js/idle-timeout.js','utf8');
+  const loader=await readFile('public/vip/helix-ui/js/portal-r1-loader.js','utf8');
+  assert.match(idle,/30 \* 60 \* 1000/);assert.match(idle,/pointerdown.*keydown.*touchstart.*wheel.*mousemove/);assert.match(idle,/scope: 'local'/);assert.match(idle,/helix:portal:idle-logout/);
+  assert.match(loader,/idle-timeout\.js\?v=idle-30m-20261012/);
+  new vm.Script(idle,{filename:'idle-timeout.js'});new vm.Script(loader,{filename:'portal-r1-loader.js'});
+});
+
+test('admin license panel offers confirmed audited deletion and MT5 slot release actions', async () => {
+  const admin=await readFile('public/vip/admin/index.html','utf8');
+  assert.match(admin,/data-license-delete=/);assert.match(admin,/Alasan penghapusan \(wajib\)/);assert.match(admin,/Konfirmasi penghapusan license/);assert.match(admin,/action:'delete',reason/);
+  assert.match(admin,/data-release="\$\{l\?\.id\}"/);assert.match(admin,/>Lepas slot<\/button>/);assert.match(admin,/Alasan untuk audit/);
 });
 
 test('VIP subdomain maps root and existing shortcut routes to the live portal shell', async () => {

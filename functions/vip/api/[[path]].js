@@ -21,11 +21,11 @@ async function supabase(env, path, { method = "GET", body, token } = {}) {
 }
 
 async function listLicenses(env, filter = "") {
-  const base = `helix_licenses?${filter ? `${filter}&` : ""}select=id,member_id,product_slug,status,expires_at,max_accounts,created_at,issued_at,first_activated_at,duration_days,activation_policy,last_successful_sync_at,entitlement_version&order=created_at.desc`;
+  const base = `helix_licenses?${filter ? `${filter}&` : ""}select=id,member_id,product_slug,status,expires_at,max_accounts,created_at,issued_at,first_activated_at,duration_days,activation_policy,last_successful_sync_at,entitlement_version,deleted_at&order=created_at.desc`;
   try { return await supabase(env, base); }
   catch {
     const legacy = `helix_licenses?${filter ? `${filter}&` : ""}select=id,member_id,product_slug,status,expires_at,max_accounts,created_at&order=created_at.desc`;
-    return (await supabase(env, legacy)).map(item => ({ ...item, activation_policy: "legacy_fixed", first_activated_at: null, issued_at: item.created_at, duration_days: null, last_successful_sync_at: null, entitlement_version: null }));
+    return (await supabase(env, legacy)).map(item => ({ ...item, activation_policy: "legacy_fixed", first_activated_at: null, issued_at: item.created_at, duration_days: null, last_successful_sync_at: null, entitlement_version: null, deleted_at: null }));
   }
 }
 
@@ -127,7 +127,7 @@ export async function onRequest({ request, env }) {
       if (session.error) return session.error;
       const id = encodeURIComponent(session.user.id);
       const [licenses, announcements, materials] = await Promise.all([
-        listLicenses(env, `member_id=eq.${id}`),
+        listLicenses(env, `member_id=eq.${id}&deleted_at=is.null`),
         supabase(env, "helix_announcements?published=eq.true&select=id,title,body,kind,published_at,created_at&order=published_at.desc.nullslast"),
         supabase(env, "helix_materials?published=eq.true&select=id,title,description,kind,storage_path,created_at&order=created_at.desc"),
       ]);
@@ -406,6 +406,19 @@ export async function onRequest({ request, env }) {
 
     if (pathname.startsWith("admin/licenses/") && method === "PATCH") {
       const id = pathname.split("/").at(-1);
+      if (json.action === "delete") {
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return response({ error: "LICENSE_NOT_FOUND" }, 404);
+        const reason = String(json.reason || "").trim();
+        if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan penghapusan wajib diisi (3–300 karakter)." }, 400);
+        try {
+          const deleted = await rpc(env, "helix_admin_delete_license", { p_license_id: id, p_actor_id: session.user.id, p_reason: reason });
+          if (!deleted?.ok) return response({ error: deleted?.error_code || "LICENSE_DELETE_FAILED" }, deleted?.error_code === "LICENSE_NOT_FOUND" ? 404 : 400);
+          return response({ ok: true, ...deleted });
+        } catch (error) {
+          if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "LICENSE_DELETE_MIGRATION_REQUIRED", message: "Fitur penghapusan license belum siap di database production." }, 503);
+          throw error;
+        }
+      }
       if (json.action === "rotate-key") {
         return response({ error: "LEGACY_KEY_DISABLED", message: "Customer authentication menggunakan pairing OTP. License key manual tidak diterbitkan." }, 410);
       }
@@ -416,6 +429,11 @@ export async function onRequest({ request, env }) {
         if (!binding) return response({ error: "BINDING_NOT_FOUND" }, 404);
         const result = await rpc(env, "helix_release_binding", { p_member_id: binding.helix_licenses.member_id, p_binding_id: binding.id, p_actor_id: session.user.id, p_reason: String(json.reason).trim().slice(0,300) });
         return result?.ok ? response({ ok: true, result }) : response({ error: result?.error_code || "RELEASE_REJECTED" }, 400);
+      }
+      if (json.action !== "rotate-key") {
+        const licenseRows = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(id)}&select=id,deleted_at`);
+        if (!licenseRows?.[0]) return response({ error: "LICENSE_NOT_FOUND" }, 404);
+        if (licenseRows[0].deleted_at) return response({ error: "LICENSE_ALREADY_DELETED", message: "License yang sudah dihapus tidak dapat diaktifkan kembali." }, 409);
       }
       if (json.action === "renew") {
         const days = Number(json.duration_days || 730);
