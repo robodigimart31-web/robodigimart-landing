@@ -20,6 +20,20 @@ async function supabase(env, path, { method = "GET", body, token } = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+async function firstRecordedTrades(env, bindingIds) {
+  const dates = new Map();
+  const pending = [...new Set(bindingIds)];
+  const workers = Array.from({ length: Math.min(4, pending.length) }, async () => {
+    while (pending.length) {
+      const bindingId = pending.shift();
+      const rows = await supabase(env, `helix_completed_trades?binding_id=eq.${encodeURIComponent(bindingId)}&closed_at_broker=gte.${encodeURIComponent("2026-09-01T00:00:00")}&select=closed_at_broker&order=closed_at_broker.asc&limit=1`);
+      if (rows?.[0]?.closed_at_broker) dates.set(bindingId, rows[0].closed_at_broker);
+    }
+  });
+  await Promise.all(workers);
+  return dates;
+}
+
 async function telemetryCanaryMembers(env) {
   const grants = await supabase(env, `helix_telemetry_canary_allowlist?expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
   const bindingIds = [...new Set(grants.map(row => row.binding_id).filter(Boolean))];
@@ -282,6 +296,7 @@ export async function onRequest({ request, env }) {
         bindingIds.length ? supabase(env, `helix_license_sessions?binding_id=in.(${bindingIds.join(",")})&select=binding_id,last_telemetry_sync_at&order=last_telemetry_sync_at.desc&limit=5000`) : Promise.resolve([]),
         currencyUsdRates(env),
       ]);
+      const firstRecorded = await firstRecordedTrades(env, bindingIds);
       const canaryMembers = !performanceGlobal && performanceCanary ? await telemetryCanaryMembers(env) : new Set();
       const latestTelemetrySync = new Map();
       for (const item of sessions) if (item.last_telemetry_sync_at && (!latestTelemetrySync.has(item.binding_id) || item.last_telemetry_sync_at > latestTelemetrySync.get(item.binding_id))) latestTelemetrySync.set(item.binding_id, item.last_telemetry_sync_at);
@@ -301,6 +316,7 @@ export async function onRequest({ request, env }) {
           mode: binding.mode,
           magic_base: binding.magic_base,
           last_telemetry_sync_at: latestTelemetrySync.get(binding.id) || null,
+          first_recorded_trade_at: firstRecorded.get(binding.id) || null,
           capture_scope: performanceGlobal ? "GLOBAL" : included ? "CANARY" : "NOT_IN_CANARY",
           metrics: { ...metrics, last_sync_at: latestTelemetrySync.get(binding.id) || null },
         };
@@ -338,9 +354,11 @@ export async function onRequest({ request, env }) {
         rpc(env, performanceGlobal ? "helix_member_performance_daily_v2" : "helix_member_performance_canary_daily_v2", { p_member_id: session.user.id, p_license_id: licenseId, p_binding_id: bindingId, p_from: from || null, p_to: to || null }),
         currencyUsdRates(env),
       ]);
+      const firstRecorded = await firstRecordedTrades(env, allowedBindings.map(item => item.id));
+      const firstRecordedTradeAt = [...firstRecorded.values()].sort()[0] || null;
       const metrics = usdMetrics(raw, currency.rates);
       const chart = (daily || []).filter(item => currency.rates[item.currency] != null).map(item => ({ date: item.broker_date, net_pnl_usd: Number(item.net_pnl) * currency.rates[item.currency], trades: item.trades }));
-      return response({ ...metrics, chart, currency_rates: currency.display, time_basis: "BROKER_SERVER", from: from || "2026-09-01T00:00:00", to });
+      return response({ ...metrics, first_recorded_trade_at: firstRecordedTradeAt, performance_basis: "RECORDED_HELIX_TRADES", chart, currency_rates: currency.display, time_basis: "BROKER_SERVER", from: from || "2026-09-01T00:00:00", to });
     }
 
     if (pathname === "member/email-change-requests" && method === "GET") {
@@ -467,14 +485,15 @@ export async function onRequest({ request, env }) {
         }
       });
       await Promise.all(summaryWorkers);
+      const firstRecorded = await firstRecordedTrades(env, selectedBindingIds);
       const accounts = selected.map(binding => {
         const license = liveLicenses.get(binding.license_id), member = memberById.get(license.member_id);
         const metrics = dataByBinding.get(binding.id) || { status: "NO_DATA", total_closed_trades: 0 };
         metrics.last_sync_at = latestSync.get(binding.id) || null;
         const now = Date.now(), expired = license.expires_at && Date.parse(license.expires_at) <= now;
-        return { member_id: license.member_id, member_name: member?.display_name || "Member", member_email: member?.email || "", license_id: license.id, license: license.license_key_hint || license.product_slug, license_status: expired ? "expired" : license.status, binding_id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, status: binding.released_at ? "released" : expired ? "expired" : license.status, last_sync_at: latestSync.get(binding.id) || null, metrics };
+        return { member_id: license.member_id, member_name: member?.display_name || "Member", member_email: member?.email || "", license_id: license.id, license: license.license_key_hint || license.product_slug, license_status: expired ? "expired" : license.status, binding_id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, status: binding.released_at ? "released" : expired ? "expired" : license.status, first_recorded_trade_at: firstRecorded.get(binding.id) || null, last_sync_at: latestSync.get(binding.id) || null, metrics };
       });
-      return response({ status: performanceGlobal ? "READY" : "CANARY", reconciliation: "server_validated_mt5_history_not_confirmed", accounts, currency_rates: fxDisplay, applied_filters: { member_id: memberFilter, license_id: licenseFilter, binding_id: bindingFilter, from, to: toValue }, message: performanceGlobal ? null : "Data hanya mencakup akun telemetry canary yang masih aktif; Performance Global tetap OFF." });
+      return response({ status: performanceGlobal ? "READY" : "CANARY", performance_basis: "RECORDED_HELIX_TRADES", accounts, currency_rates: fxDisplay, applied_filters: { member_id: memberFilter, license_id: licenseFilter, binding_id: bindingFilter, from, to: toValue }, message: performanceGlobal ? "Recorded HELIX Performance: hanya deal yang diterima dan lolos validasi server dihitung. Histori sebelum First Recorded Trade mungkin tidak lengkap." : "Recorded HELIX Performance terbatas pada akun canary; hanya deal yang diterima dan lolos validasi server dihitung. Histori sebelum First Recorded Trade mungkin tidak lengkap." });
     }
 
     if (pathname === "admin/performance/details" && method === "GET") {

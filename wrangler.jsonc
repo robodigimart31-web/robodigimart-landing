@@ -10,8 +10,8 @@
                                                 "PORTAL_EMAIL_CHANGE_ENABLED":  "false",
                                                 "PORTAL_OTP_ENABLED":  "true",
                                                 "PORTAL_OTP_CANARY_ENABLED":  "true",
-                                                "PORTAL_PERFORMANCE_ENABLED":  "false",
-                                                "EA_R7_TELEMETRY_READY":  "false",
+                                                "PORTAL_PERFORMANCE_ENABLED":  "true",
+                                                "EA_R7_TELEMETRY_READY":  "true",
                                                 "PORTAL_PERFORMANCE_CANARY_ENABLED":  "true"
                                             }
                                },
