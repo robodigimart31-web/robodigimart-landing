@@ -9,6 +9,7 @@
         "PORTAL_LICENSE_MANAGEMENT_ENABLED": "true",
         "PORTAL_EMAIL_CHANGE_ENABLED": "false",
         "PORTAL_OTP_ENABLED": "false",
+        "PORTAL_OTP_CANARY_ENABLED": "true",
         "PORTAL_PERFORMANCE_ENABLED": "false",
         "EA_R7_TELEMETRY_READY": "false"
       }
@@ -18,6 +19,7 @@
         "PORTAL_LICENSE_MANAGEMENT_ENABLED": "false",
         "PORTAL_EMAIL_CHANGE_ENABLED": "false",
         "PORTAL_OTP_ENABLED": "false",
+        "PORTAL_OTP_CANARY_ENABLED": "false",
         "PORTAL_PERFORMANCE_ENABLED": "false",
         "EA_R7_TELEMETRY_READY": "false"
       }
