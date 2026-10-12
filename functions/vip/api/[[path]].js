@@ -218,11 +218,20 @@ export async function onRequest({ request, env }) {
         license.effective_status = license.status !== "active" ? license.status.toUpperCase() : license.expires_at && Date.parse(license.expires_at) <= Date.now() ? "EXPIRED" : license.activation_policy === "first_activation" && !license.first_activated_at ? "PENDING ACTIVATION" : "ACTIVE";
       }
       const licenseIds = licenses.map(x => x.id);
-      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&released_at=is.null&select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at`) : [];
+      const releaseAckV18k = env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true";
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&${releaseAckV18k ? "" : "released_at=is.null&"}select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at${releaseAckV18k ? ",released_at,release_state,release_request_id,release_requested_at" : ""}`) : [];
+      if (releaseAckV18k) {
+        const offlineBefore = Date.now() - 30 * 60_000;
+        for (const binding of bindings) {
+          binding.release_state = binding.release_state || (binding.released_at ? "released" : "active");
+          binding.binding_status = binding.release_state === "pending_release" ? "PENDING RELEASE" : binding.release_state === "released" ? "RELEASED" : "ACTIVE";
+          binding.terminal_status = binding.release_state === "released" ? "—" : binding.last_sync_at && Date.parse(binding.last_sync_at) >= offlineBefore ? "ONLINE" : "OFFLINE";
+        }
+      }
       const events = licenseIds.length ? await supabase(env, `helix_license_events?license_id=in.(${licenseIds.join(",")})&select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100`) : [];
       let emailChangeRequests = [];
       try { emailChangeRequests = await supabase(env, `helix_email_change_requests?member_id=eq.${id}&select=id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&order=created_at.desc&limit=20`); } catch { /* migration pending: keep existing member pages available */ }
-      return response({ member: session.member, licenses, bindings, events, announcements, materials, emailChangeRequests });
+      return response({ member: session.member, licenses, bindings, events, announcements, materials, emailChangeRequests, release_ack_v18k: env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true" });
     }
 
     if (pathname === "member/profile" && method === "PATCH") {
@@ -398,6 +407,10 @@ export async function onRequest({ request, env }) {
       if (session.error) return session.error;
       const bindingId = pathname.split("/").at(-1);
       if (!/^[0-9a-f-]{36}$/i.test(bindingId)) return response({ error: "BINDING_NOT_FOUND" }, 404);
+      if (env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true") {
+        const pending = await rpc(env, "helix_request_binding_release_v18k", { p_member_id: session.user.id, p_binding_id: bindingId, p_actor_id: session.user.id, p_reason: String(json.reason || "Member requested release") });
+        return pending?.ok ? response({ ok: true, ...pending }) : response({ error: pending?.error_code || "RELEASE_REJECTED" }, 404);
+      }
       const result = await rpc(env, "helix_release_binding", { p_member_id: session.user.id, p_binding_id: bindingId, p_actor_id: session.user.id, p_reason: String(json.reason || "Member requested release") });
       return result?.ok ? response({ ok: true, ...result }) : response({ error: result?.error_code || "RELEASE_REJECTED" }, 404);
     }
@@ -408,7 +421,7 @@ export async function onRequest({ request, env }) {
       const [members, licenses, bindings, events, announcements, materials, authUsers] = await Promise.all([
         supabase(env, "helix_members?select=id,email,display_name,role,created_at&order=created_at.desc"),
         listLicenses(env),
-        supabase(env, "helix_license_bindings?select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at&order=first_seen_at.desc"),
+        supabase(env, `helix_license_bindings?select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at${env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true" ? ",release_state,release_request_id,release_requested_at" : ""}&order=first_seen_at.desc`),
         supabase(env, "helix_license_events?select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100"),
         supabase(env, "helix_announcements?select=id,title,body,kind,published,published_at,created_at&order=created_at.desc"),
         supabase(env, "helix_materials?select=id,title,description,kind,storage_path,published,created_at&order=created_at.desc"),
@@ -420,7 +433,15 @@ export async function onRequest({ request, env }) {
       try { emailRequests = await supabase(env, "helix_email_change_requests?select=id,member_id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&status=in.(pending,approved_awaiting_verification)&order=created_at.asc&limit=200"); }
       catch { emailRequestsAvailable = false; }
       const membersById = new Map(enrichedMembers.map(member => [member.id, member]));
-      return response({ admin: session.member, members: enrichedMembers, licenses, bindings, events, announcements, materials, emailRequests: emailRequests.map(item => ({ ...item, member: membersById.get(item.member_id) || null })), emailRequestsAvailable });
+      if (env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true") {
+        const offlineBefore = Date.now() - 30 * 60_000;
+        for (const binding of bindings) {
+          binding.release_state = binding.release_state || (binding.released_at ? "released" : "active");
+          binding.binding_status = binding.release_state === "pending_release" ? "PENDING RELEASE" : binding.release_state === "released" ? "RELEASED" : "ACTIVE";
+          binding.terminal_status = binding.release_state === "released" ? "—" : binding.last_sync_at && Date.parse(binding.last_sync_at) >= offlineBefore ? "ONLINE" : "OFFLINE";
+        }
+      }
+      return response({ admin: session.member, members: enrichedMembers, licenses, bindings, events, announcements, materials, emailRequests: emailRequests.map(item => ({ ...item, member: membersById.get(item.member_id) || null })), emailRequestsAvailable, release_ack_v18k: env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true" });
     }
 
     const session = await requireUser(request, env, pathname.startsWith("admin/"));
@@ -715,6 +736,11 @@ export async function onRequest({ request, env }) {
         const rows = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(json.binding_id)}&license_id=eq.${encodeURIComponent(id)}&select=id,license_id,helix_licenses!inner(member_id)`);
         const binding = rows?.[0];
         if (!binding) return response({ error: "BINDING_NOT_FOUND" }, 404);
+        if (env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true") {
+          if (json.force_release_acknowledged !== true) return response({ error: "FORCE_RELEASE_CONFIRMATION_REQUIRED", message: "Admin Force Release memutus slot tanpa menunggu semua terminal menghapus pending order dan mengirim ACK." }, 409);
+          const forced = await rpc(env, "helix_force_release_binding_v18k", { p_binding_id: binding.id, p_actor_id: session.user.id, p_reason: String(json.reason).trim().slice(0,300) });
+          return forced?.ok ? response({ ok: true, result: forced }) : response({ error: forced?.error_code || "FORCE_RELEASE_FAILED" }, 400);
+        }
         const result = await rpc(env, "helix_release_binding", { p_member_id: binding.helix_licenses.member_id, p_binding_id: binding.id, p_actor_id: session.user.id, p_reason: String(json.reason).trim().slice(0,300) });
         return result?.ok ? response({ ok: true, result }) : response({ error: result?.error_code || "RELEASE_REJECTED" }, 400);
       }

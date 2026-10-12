@@ -4,6 +4,7 @@ const enabled = value => value === "true";
 
 export async function onRequestGet({ env }) {
   const otp = enabled(env.PORTAL_OTP_ENABLED);
+  const releaseAckV18k = enabled(env.PORTAL_LICENSE_RELEASE_ACK_V18K);
   const performance = enabled(env.PORTAL_PERFORMANCE_ENABLED) && enabled(env.EA_R7_TELEMETRY_READY);
   const performanceCanary = !performance && enabled(env.PORTAL_PERFORMANCE_CANARY_ENABLED);
   return json({
@@ -11,12 +12,14 @@ export async function onRequestGet({ env }) {
     features: {
       license_management: enabled(env.PORTAL_LICENSE_MANAGEMENT_ENABLED),
       otp_pairing: otp,
+      license_release_ack_v18k: releaseAckV18k,
       email_change: enabled(env.PORTAL_EMAIL_CHANGE_ENABLED),
       trading_performance: performance,
       trading_performance_canary: performanceCanary,
     },
     readiness: {
       otp_pairing: otp ? "enabled" : "not_activated",
+      license_release_ack_v18k: releaseAckV18k ? "enabled" : "staged_off",
       trading_performance: performance ? "enabled" : "waiting_for_verified_ea_r7",
       trading_performance_global: performance ? "enabled" : "off",
       trading_performance_canary: performanceCanary ? "restricted_canary" : "off",

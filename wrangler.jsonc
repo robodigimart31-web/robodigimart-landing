@@ -12,7 +12,8 @@
                                                 "PORTAL_OTP_CANARY_ENABLED":  "true",
                                                 "PORTAL_PERFORMANCE_ENABLED":  "true",
                                                 "EA_R7_TELEMETRY_READY":  "true",
-                                                "PORTAL_PERFORMANCE_CANARY_ENABLED":  "true"
+                                                "PORTAL_PERFORMANCE_CANARY_ENABLED":  "true",
+                                                "PORTAL_LICENSE_RELEASE_ACK_V18K":  "false"
                                             }
                                },
                 "preview":  {
@@ -22,7 +23,8 @@
                                              "PORTAL_OTP_ENABLED":  "false",
                                              "PORTAL_OTP_CANARY_ENABLED":  "false",
                                              "PORTAL_PERFORMANCE_ENABLED":  "false",
-                                             "EA_R7_TELEMETRY_READY":  "false"
+                                             "EA_R7_TELEMETRY_READY":  "false",
+                                             "PORTAL_LICENSE_RELEASE_ACK_V18K":  "false"
                                          }
                             }
             }

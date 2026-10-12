@@ -2,8 +2,11 @@
 import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import vm from 'node:vm';
+import { webcrypto } from 'node:crypto';
 import { onRequestPost as pairStart } from '../functions/api/license/v1/pair/start.js';
 import { onRequestPost as pairPoll } from '../functions/api/license/v1/pair/poll.js';
+import { onRequestPost as licenseSync } from '../functions/api/license/v1/sync.js';
+import { onRequestPost as releaseAck } from '../functions/api/license/v1/release/ack.js';
 import { onRequestPost as telemetry, performanceWindowStart as telemetryWindowStart } from '../functions/api/telemetry/v1/deals.js';
 import { onRequestGet as portalStatus } from '../functions/api/portal/v1/status.js';
 import { onRequest as vipApi } from '../functions/vip/api/[[path]].js';
@@ -41,11 +44,62 @@ test('pair start enforces atomic rate limit response', async t => {
   assert.equal((await response.json()).retry_after_seconds,90);
 });
 
+test('v1.8k sync remains gated from legacy clients and advertises 15 minute retry on the staged path', async t => {
+  let calls=[];
+  t.mock.method(globalThis,'fetch',async(url,options)=>{const value=String(url);if(value.includes('/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rpc/helix_license_sync_v18k')){calls.push('v18k');return Response.json({state:'PENDING_RELEASE',release_id:'11111111-1111-4111-8111-111111111111',server_time:'2026-10-12T10:00:00Z'})}if(value.includes('/rpc/helix_license_sync')){calls.push('legacy');return Response.json({state:'REVOKED',error_code:'SESSION_REVOKED'})}throw new Error(`Unexpected request: ${url}`)});
+  const request=()=>new Request('https://local.test/api/license/v1/sync',{method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'application/json'},body:'{}'});
+  const disabled=await licenseSync({request:request(),env:{SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret,PORTAL_OTP_ENABLED:'true'}});
+  assert.equal(disabled.status,403);assert.deepEqual(calls,['legacy']);
+  const response=await licenseSync({request:request(),env:{SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret,PORTAL_OTP_ENABLED:'true',PORTAL_LICENSE_RELEASE_ACK_V18K:'true'}});
+  const body=await response.json();assert.equal(response.status,200);assert.deepEqual(calls,['legacy','v18k']);assert.equal(body.next_sync_seconds,900);assert.equal(body.release_id,'11111111-1111-4111-8111-111111111111');
+});
+
+test('v1.8k active renewal returns a signed entitlement with a maximum 120 minute offline deadline', async t => {
+  const pair=await webcrypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']);
+  const privateKey=Buffer.from(await webcrypto.subtle.exportKey('pkcs8',pair.privateKey)).toString('base64');
+  const entitlement={protocol_version:'v2',license_scope:'product',license_id:'11111111-1111-4111-8111-111111111111',binding_id:'22222222-2222-4222-8222-222222222222',account_fingerprint:'a'.repeat(64),status:'ACTIVE',license_expires_at:'2028-10-10T00:00:00Z',entitlement_version:2,ea_product_id:'quadriga',ea_version:'1.8k',allowed_products:['quadriga'],issued_at:'2026-10-12T10:00:00Z',server_time:'2026-10-12T10:00:00Z',offline_expires_at:'2026-10-12T12:00:00Z'};
+  t.mock.method(globalThis,'fetch',async(url,options)=>{const value=String(url);if(value.includes('/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rpc/helix_license_sync_v18k'))return Response.json({state:'ACTIVE',server_time:'2026-10-12T10:00:00Z',entitlement});throw new Error(`Unexpected request: ${url}`)});
+  const request=new Request('https://local.test/api/license/v1/sync',{method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'application/json'},body:'{}'});
+  const response=await licenseSync({request,env:{SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret,PORTAL_OTP_ENABLED:'true',PORTAL_LICENSE_RELEASE_ACK_V18K:'true',LICENSE_SIGNING_PRIVATE_KEY_PKCS8:privateKey}});
+  const body=await response.json();assert.equal(response.status,200);assert.equal(body.state,'ACTIVE');assert.equal(body.next_sync_seconds,900);assert.equal(body.retry_after_seconds,900);assert.equal(body.offline_grace_hours,2);assert.ok(body.entitlement.signature);assert.equal(Date.parse(body.entitlement.payload.offline_expires_at)-Date.parse(body.entitlement.payload.server_time),120*60_000);
+});
+
+test('v1.8k sync returns PENDING_RELEASE as a successful stop signal and does not sign ACTIVE entitlement', async t => {
+  t.mock.method(globalThis,'fetch',async url=>{const value=String(url);if(value.includes('/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rpc/helix_license_sync_v18k'))return Response.json({state:'PENDING_RELEASE',release_id:'11111111-1111-4111-8111-111111111111',server_time:'2026-10-12T10:00:00Z'});throw new Error(`Unexpected request: ${url}`)});
+  const request=new Request('https://local.test/api/license/v1/sync',{method:'POST',headers:{authorization:'Bearer '+secret,'content-type':'application/json'},body:'{}'});
+  const response=await licenseSync({request,env:{SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret,PORTAL_OTP_ENABLED:'true',PORTAL_LICENSE_RELEASE_ACK_V18K:'true'}});
+  const body=await response.json();assert.equal(response.status,200);assert.equal(body.state,'PENDING_RELEASE');assert.equal(body.next_sync_seconds,900);assert.equal(body.release_id,'11111111-1111-4111-8111-111111111111');assert.equal(body.entitlement,undefined);
+});
+
+test('v1.8k release ACK requires feature flag, session proof, release id, and clean pending orders; released ACK is idempotent', async t => {
+  let ackArgs;
+  t.mock.method(globalThis,'fetch',async(url,options)=>{const value=String(url);if(value.includes('/rpc/helix_rate_limit'))return Response.json({allowed:true});if(value.includes('/rpc/helix_release_ack_v18k')){ackArgs=JSON.parse(options.body);return Response.json({ok:true,state:'RELEASED',release_id:ackArgs.p_release_id,idempotent:true,released_at:'2026-10-12T10:00:00Z'})}throw new Error(`Unexpected request: ${url}`)});
+  const makeRequest=(body,authorization='Bearer '+secret)=>new Request('https://local.test/api/license/v1/release/ack',{method:'POST',headers:{authorization,'content-type':'application/json'},body:JSON.stringify(body)});
+  const off=await releaseAck({request:makeRequest({release_id:'11111111-1111-4111-8111-111111111111',pending_orders_clean:true}),env:{SUPABASE_SERVICE_ROLE_KEY:'test'}});assert.equal(off.status,503);
+  const noProof=await releaseAck({request:makeRequest({release_id:'11111111-1111-4111-8111-111111111111',pending_orders_clean:true},''),env:{SUPABASE_SERVICE_ROLE_KEY:'test',PORTAL_LICENSE_RELEASE_ACK_V18K:'true'}});assert.equal(noProof.status,401);
+  const dirty=await releaseAck({request:makeRequest({release_id:'11111111-1111-4111-8111-111111111111',pending_orders_clean:false}),env:{SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret,PORTAL_LICENSE_RELEASE_ACK_V18K:'true'}});assert.equal(dirty.status,422);
+  const response=await releaseAck({request:makeRequest({release_id:'11111111-1111-4111-8111-111111111111',pending_orders_clean:true}),env:{SUPABASE_SERVICE_ROLE_KEY:'test',PAIRING_HASH_SECRET:secret,PORTAL_LICENSE_RELEASE_ACK_V18K:'true'}});
+  const body=await response.json();assert.equal(response.status,200);assert.equal(body.state,'RELEASED');assert.equal(body.idempotent,true);assert.equal(ackArgs.p_pending_orders_clean,true);assert.equal(ackArgs.p_release_id,'11111111-1111-4111-8111-111111111111');assert.equal(ackArgs.p_session_hash.length,64);
+});
+
+test('v1.8k SQL keeps release pending until every non-revoked binding session ACKs and audits force release', async () => {
+  const sql=await readFile('supabase/migrations/202610130001_helix_license_release_ack_v18k.sql','utf8');
+  assert.match(sql,/release_state in \('active','pending_release','released'\)/);
+  assert.match(sql,/state','PENDING_RELEASE'[\s\S]*slot_retained',true/);
+  assert.match(sql,/select count\(\*\) into v_required from public\.helix_license_sessions where binding_id=v_binding\.id and revoked_at is null/);
+  assert.match(sql,/if v_required=0 or v_acked<v_required then return jsonb_build_object\('ok',true,'state','PENDING_RELEASE'/);
+  assert.match(sql,/release_ack_orders_clean is true/);
+  assert.match(sql,/update public\.helix_license_bindings set release_state='released',released_at=v_now/);
+  assert.match(sql,/ADMIN_REQUIRED/);assert.match(sql,/action','admin_force_release/);assert.match(sql,/warning_acknowledged',true/);
+  assert.match(sql,/revoke all on function public\.%s from public,anon,authenticated/);assert.match(sql,/grant execute on function public\.%s to service_role/);
+});
+
 test('production portal flags default closed and performance requires explicit R7 verification', async () => {
   const response=await portalStatus({env:{}});
   const payload=await response.json();
   assert.equal(response.status,200);
-  assert.deepEqual(payload.features,{license_management:false,otp_pairing:false,email_change:false,trading_performance:false,trading_performance_canary:false});
+  assert.deepEqual(payload.features,{license_management:false,otp_pairing:false,license_release_ack_v18k:false,email_change:false,trading_performance:false,trading_performance_canary:false});
+  const staged=await portalStatus({env:{PORTAL_LICENSE_RELEASE_ACK_V18K:'true'}});assert.equal((await staged.json()).readiness.license_release_ack_v18k,'enabled');
   const r7=await portalStatus({env:{PORTAL_PERFORMANCE_ENABLED:'true'}});
   assert.equal((await r7.json()).features.trading_performance,false);
 });
@@ -401,7 +455,8 @@ test('member and admin portals share a 30-minute cross-tab idle sign-out', async
 test('admin license panel offers confirmed audited deletion and MT5 slot release actions', async () => {
   const admin=await readFile('public/vip/admin/index.html','utf8');
   assert.match(admin,/data-license-delete=/);assert.match(admin,/Alasan penghapusan \(wajib\)/);assert.match(admin,/Konfirmasi penghapusan license/);assert.match(admin,/action:'delete',reason/);
-  assert.match(admin,/data-release="\$\{l\?\.id\}"/);assert.match(admin,/>Lepas slot<\/button>/);assert.match(admin,/Alasan untuk audit/);
+  assert.match(admin,/data-release="\$\{l\?\.id\}"/);assert.match(admin,/v18k\?'Force Release':'Lepas slot'/);assert.match(admin,/Alasan untuk audit/);
+  const adapter=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8');assert.match(adapter,/Force Release langsung membebaskan slot/);assert.match(adapter,/force_release_acknowledged:Boolean\(v18k\)/);
 });
 
 test('VIP subdomain maps root and existing shortcut routes to the live portal shell', async () => {
