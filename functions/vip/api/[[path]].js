@@ -398,7 +398,7 @@ export async function onRequest({ request, env }) {
         const now = Date.now(), expired = license.expires_at && Date.parse(license.expires_at) <= now;
         return { member_id: license.member_id, member_name: member?.display_name || "Member", member_email: member?.email || "", license_id: license.id, license: license.license_key_hint || license.product_slug, license_status: expired ? "expired" : license.status, binding_id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, status: binding.released_at ? "released" : expired ? "expired" : license.status, last_sync_at: latestSync.get(binding.id) || binding.last_sync_at || null, metrics };
       });
-      return response({ status: performanceGlobal ? "READY" : "CANARY", accounts, currency_rates: fxDisplay, applied_filters: { member_id: memberFilter, license_id: licenseFilter, binding_id: bindingFilter, from, to: toValue }, message: performanceGlobal ? null : "Data hanya mencakup akun telemetry canary yang masih aktif; Performance Global tetap OFF." });
+      return response({ status: performanceGlobal ? "READY" : "CANARY", reconciliation: "server_validated_mt5_history_not_confirmed", accounts, currency_rates: fxDisplay, applied_filters: { member_id: memberFilter, license_id: licenseFilter, binding_id: bindingFilter, from, to: toValue }, message: performanceGlobal ? null : "Data hanya mencakup akun telemetry canary yang masih aktif; Performance Global tetap OFF." });
     }
 
     if (pathname === "admin/performance/details" && method === "GET") {
@@ -427,7 +427,7 @@ export async function onRequest({ request, env }) {
       if (positionIds.length) deals = await supabase(env, `helix_telemetry_deals?binding_id=eq.${encodeURIComponent(bindingId)}&position_id=in.(${positionIds.map(encodeURIComponent).join(",")})&select=deal_ticket,position_id,occurred_at_broker,direction,entry_kind,volume,profit,commission,swap,fee,currency,symbol,magic&order=occurred_at_broker.asc&limit=5000`);
       const dealsByPosition = new Map();
       for (const deal of deals) { const list = dealsByPosition.get(deal.position_id) || []; list.push(deal); dealsByPosition.set(deal.position_id, list); }
-      return response({ status: performanceGlobal ? "READY" : "CANARY", binding: { id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, license_status: licenses[0].status }, trades: trades.map(trade => ({ ...trade, deals: dealsByPosition.get(trade.position_id) || [] })), page, page_size: pageSize, has_more: hasMore, from, to: toValue });
+      return response({ status: performanceGlobal ? "READY" : "CANARY", reconciliation: "server_validated_mt5_history_not_confirmed", binding: { id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, license_status: licenses[0].status }, trades: trades.map(trade => ({ ...trade, deals: dealsByPosition.get(trade.position_id) || [] })), page, page_size: pageSize, has_more: hasMore, from, to: toValue });
     }
 
     if (pathname === "admin/performance" && method === "GET") {
