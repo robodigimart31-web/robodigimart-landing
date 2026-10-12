@@ -20,6 +20,17 @@ async function supabase(env, path, { method = "GET", body, token } = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+async function telemetryCanaryMembers(env) {
+  const grants = await supabase(env, `helix_telemetry_canary_allowlist?expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
+  const bindingIds = [...new Set(grants.map(row => row.binding_id).filter(Boolean))];
+  if (!bindingIds.length) return new Set();
+  const bindings = await supabase(env, `helix_license_bindings?id=in.(${bindingIds.join(",")})&select=license_id`);
+  const licenseIds = [...new Set(bindings.map(row => row.license_id).filter(Boolean))];
+  if (!licenseIds.length) return new Set();
+  const licenses = await supabase(env, `helix_licenses?id=in.(${licenseIds.join(",")})&select=member_id`);
+  return new Set(licenses.map(row => row.member_id).filter(Boolean));
+}
+
 async function listLicenses(env, filter = "") {
   const base = `helix_licenses?${filter ? `${filter}&` : ""}select=id,member_id,product_slug,status,expires_at,max_accounts,created_at,issued_at,first_activated_at,duration_days,activation_policy,last_successful_sync_at,entitlement_version,deleted_at&order=created_at.desc`;
   try { return await supabase(env, base); }
@@ -203,7 +214,7 @@ export async function onRequest({ request, env }) {
     if (pathname === "member/profile" && method === "PATCH") {
       const session = earlySession;
       const displayName = String(json.display_name || "").trim().replace(/\s+/g, " ");
-      if (displayName.length < 2 || displayName.length > 80 || /[\u0000-\u001f\u007f]/.test(displayName)) return response({ error: "Nama harus 2–80 karakter dan tidak boleh berisi karakter kontrol." }, 400);
+      if (displayName.length < 2 || displayName.length > 80 || /[\u0000-\u001f\u007f]/.test(displayName)) return response({ error: "Nama harus 2-80 karakter dan tidak boleh berisi karakter kontrol." }, 400);
       const updated = await supabase(env, `helix_members?id=eq.${encodeURIComponent(session.user.id)}&select=id,email,display_name,role`, { method: "PATCH", body: { display_name: displayName } });
       if (!updated?.[0]) return response({ error: "Profil member tidak ditemukan." }, 404);
       return response({ ok: true, member: updated[0] });
@@ -271,18 +282,12 @@ export async function onRequest({ request, env }) {
         bindingIds.length ? supabase(env, `helix_license_sessions?binding_id=in.(${bindingIds.join(",")})&select=binding_id,last_telemetry_sync_at&order=last_telemetry_sync_at.desc&limit=5000`) : Promise.resolve([]),
         currencyUsdRates(env),
       ]);
-      let canaryIds = new Set();
-      if (!performanceGlobal && performanceCanary && bindingIds.length) {
-        try {
-          const rows = await supabase(env, `helix_telemetry_canary_allowlist?binding_id=in.(${bindingIds.join(",")})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
-          canaryIds = new Set(rows.map(row => row.binding_id));
-        } catch { /* absent canary migration is treated as no member-visible telemetry */ }
-      }
+      const canaryMembers = !performanceGlobal && performanceCanary ? await telemetryCanaryMembers(env) : new Set();
       const latestTelemetrySync = new Map();
       for (const item of sessions) if (item.last_telemetry_sync_at && (!latestTelemetrySync.has(item.binding_id) || item.last_telemetry_sync_at > latestTelemetrySync.get(item.binding_id))) latestTelemetrySync.set(item.binding_id, item.last_telemetry_sync_at);
       const accounts = await Promise.all(bindings.map(async binding => {
         const license = licenseById.get(binding.license_id);
-        const included = performanceGlobal || (performanceCanary && binding.mode === "demo" && canaryIds.has(binding.id));
+        const included = performanceGlobal || (performanceCanary && canaryMembers.has(session.user.id));
         const metrics = included
           ? usdMetrics(await rpc(env, performanceGlobal ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2", { p_member_id: session.user.id, p_license_id: license.id, p_binding_id: binding.id, p_from: from, p_to: toValue }), rates)
           : { status: "NOT_IN_CANARY", total_closed_trades: 0, wins: 0, losses: 0, break_even: 0, winrate: null, profit_factor: null, net_pnl_usd: null, unsupported_currencies: [] };
@@ -300,7 +305,7 @@ export async function onRequest({ request, env }) {
           metrics: { ...metrics, last_sync_at: latestTelemetrySync.get(binding.id) || null },
         };
       }));
-      return response({ status: performanceGlobal ? "READY" : performanceCanary ? "CANARY" : "WAITING_FOR_EA_R7", accounts, currency_rates: fxDisplay, from, to: toValue, earliest_supported_date: "2026-09-01T00:00:00", message: performanceGlobal ? null : "Performance Global masih OFF. Data canary hanya ditampilkan untuk akun demo yang diizinkan; akun real belum menerima telemetry." });
+      return response({ status: performanceGlobal ? "READY" : performanceCanary ? "CANARY" : "WAITING_FOR_EA_R7", accounts, currency_rates: fxDisplay, from, to: toValue, earliest_supported_date: "2026-09-01T00:00:00", message: performanceGlobal ? null : "Performance Global masih OFF. Seluruh akun milik member canary yang diizinkan-demo maupun real-termasuk binding baru dicakup selama grant canary berlaku." });
     }
 
     if (pathname === "member/performance" && method === "GET") {
@@ -325,9 +330,8 @@ export async function onRequest({ request, env }) {
       }
       const allowedBindings = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${ownedLicenseIds.join(",")})&released_at=is.null&select=id`) : [];
       if (!performanceGlobal) {
-        const testIds = allowedBindings.map(item => item.id);
-        const canary = testIds.length ? await supabase(env, `helix_telemetry_canary_allowlist?binding_id=in.(${testIds.join(",")})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id&limit=1`) : [];
-        if (!canary.length) return response({ status: "WAITING_FOR_EA_R7", message: "Performa canary hanya tersedia untuk akun demo yang terdaftar." }, 200);
+        const canaryMembers = await telemetryCanaryMembers(env);
+        if (!canaryMembers.has(session.user.id)) return response({ status: "WAITING_FOR_EA_R7", message: "Performa canary hanya tersedia untuk member testing yang diizinkan." }, 200);
       }
       const [raw, daily, currency] = await Promise.all([
         rpc(env, performanceGlobal ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2", { p_member_id: session.user.id, p_license_id: licenseId, p_binding_id: bindingId, p_from: from || null, p_to: to || null }),
@@ -417,16 +421,21 @@ export async function onRequest({ request, env }) {
       if (fromValue === undefined || toValue === undefined) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
       const from = boundedPerformanceFrom(fromValue);
       if (from === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
-      let canaryIds = null;
+      let canaryMemberIds = null, canaryLicenseIds = null;
       if (!performanceGlobal) {
-        const rows = await supabase(env, `helix_telemetry_canary_allowlist?expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
-        canaryIds = [...new Set(rows.map(row => row.binding_id))];
-        if (!canaryIds.length) return response({ status: "CANARY", accounts: [], message: "Belum ada akun canary aktif." });
+        canaryMemberIds = await telemetryCanaryMembers(env);
+        if (!canaryMemberIds.size) return response({ status: "CANARY", accounts: [], message: "Belum ada member canary aktif." });
+        const canaryLicenses = await supabase(env, `helix_licenses?member_id=in.(${[...canaryMemberIds].join(",")})&deleted_at=is.null&select=id`);
+        canaryLicenseIds = [...new Set(canaryLicenses.map(row => row.id))];
+        if (!canaryLicenseIds.length) return response({ status: "CANARY", accounts: [], message: "Member canary belum memiliki license aktif." });
       }
       const clauses = ["released_at=is.null", "select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at,first_seen_at", "order=first_seen_at.desc", "limit=1000"];
-      if (bindingFilter && canaryIds && !canaryIds.includes(bindingFilter)) return response({ error: "INVALID_FILTER" }, 404);
+      if (bindingFilter && canaryLicenseIds) {
+        const requestedBinding = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingFilter)}&select=license_id&limit=1`);
+        if (!requestedBinding.length || !canaryLicenseIds.includes(requestedBinding[0].license_id)) return response({ error: "INVALID_FILTER" }, 404);
+      }
       if (bindingFilter) clauses.push(`id=eq.${encodeURIComponent(bindingFilter)}`);
-      else if (canaryIds) clauses.push(`id=in.(${canaryIds.join(",")})`);
+      else if (canaryLicenseIds) clauses.push(`license_id=in.(${canaryLicenseIds.join(",")})`);
       const bindings = await supabase(env, `helix_license_bindings?${clauses.join("&")}`);
       if (!bindings.length) return response({ status: performanceGlobal ? "READY" : "CANARY", accounts: [], message: "Tidak ada akun MT5 untuk filter ini." });
       const licenseIds = [...new Set(bindings.map(row => row.license_id))];
@@ -480,12 +489,9 @@ export async function onRequest({ request, env }) {
       if (from === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
       const bindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&select=id,license_id,broker_server,account_login,mode,magic_base,released_at&limit=1`);
       const binding = bindings[0]; if (!binding || binding.released_at) return response({ error: "BINDING_NOT_FOUND" }, 404);
-      if (!performanceGlobal) {
-        const canary = await supabase(env, `helix_telemetry_canary_allowlist?binding_id=eq.${encodeURIComponent(bindingId)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id&limit=1`);
-        if (!canary.length || binding.mode !== "demo") return response({ error: "PERFORMANCE_CANARY_ONLY" }, 403);
-      }
       const licenses = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(binding.license_id)}&deleted_at=is.null&select=id,member_id,status,expires_at&limit=1`);
       if (!licenses.length) return response({ error: "LICENSE_NOT_FOUND" }, 404);
+      if (!performanceGlobal && !(await telemetryCanaryMembers(env)).has(licenses[0].member_id)) return response({ error: "PERFORMANCE_CANARY_ONLY" }, 403);
       const params = [`binding_id=eq.${encodeURIComponent(bindingId)}`, `closed_at_broker=gte.${encodeURIComponent(from)}`];
       if (toValue) params.push(`closed_at_broker=lt.${encodeURIComponent(toValue)}`);
       params.push("select=position_id,currency,symbol,net_pnl,outcome,opened_at_broker,closed_at_broker", "order=closed_at_broker.desc", `limit=${pageSize + 1}`, `offset=${(page - 1) * pageSize}`);
@@ -524,12 +530,7 @@ export async function onRequest({ request, env }) {
       if (performanceEnabled) await rateLimit(request, env, "admin_performance", session.user.id, 10, 60);
       let members = await supabase(env, `helix_members?role=eq.member&select=id,email,display_name,created_at&order=created_at.desc&limit=1000`);
       if (!performanceGlobalAdmin && performanceEnabled) {
-        const canaryBindings = await supabase(env, `helix_telemetry_canary_allowlist?expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
-        const ids = canaryBindings.map(item => item.binding_id);
-        const boundRows = ids.length ? await supabase(env, `helix_license_bindings?id=in.(${ids.join(",")})&select=license_id`) : [];
-        const licenseIds = [...new Set(boundRows.map(item => item.license_id))];
-        const owners = licenseIds.length ? await supabase(env, `helix_licenses?id=in.(${licenseIds.join(",")})&deleted_at=is.null&select=member_id`) : [];
-        const allowedMembers = new Set(owners.map(item => item.member_id));
+        const allowedMembers = await telemetryCanaryMembers(env);
         members = members.filter(member => allowedMembers.has(member.id));
       }
       const filterMember = url.searchParams.get("member_id"), filterLicense = url.searchParams.get("license_id"), filterBinding = url.searchParams.get("binding_id");
@@ -602,7 +603,7 @@ export async function onRequest({ request, env }) {
       const reason = String(json.reason || "").trim();
       if (!/^[0-9a-f-]{36}$/i.test(targetId) || !["admin", "member"].includes(role)) return response({ error: "INVALID_ROLE_CHANGE" }, 400);
       if (targetId === session.user.id) return response({ error: "SELF_ROLE_CHANGE_BLOCKED", message: "Role akun yang sedang digunakan tidak dapat diubah dari sesi ini." }, 400);
-      if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan perubahan wajib diisi (3–300 karakter)." }, 400);
+      if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan perubahan wajib diisi (3-300 karakter)." }, 400);
       try {
         const result = await rpc(env, "helix_admin_set_member_role", { p_target_member_id: targetId, p_actor_id: session.user.id, p_role: role, p_reason: reason });
         if (!result?.ok) return response({ error: result?.error_code || "ROLE_CHANGE_FAILED" }, result?.error_code === "MEMBER_NOT_FOUND" ? 404 : 400);
@@ -636,7 +637,7 @@ export async function onRequest({ request, env }) {
         if (!target.length) return response({ error: "Member tidak ditemukan." }, 404);
         if (target[0].role === "admin") return response({ error: "Akun admin tidak dapat disuspend dari menu Member." }, 400);
         const reason = String(json.reason || "").trim();
-        if (reason.length < 3 || reason.length > 300) return response({ error: "Alasan suspend/pemulihan wajib diisi (3–300 karakter)." }, 400);
+        if (reason.length < 3 || reason.length > 300) return response({ error: "Alasan suspend/pemulihan wajib diisi (3-300 karakter)." }, 400);
         const suspended = json.action === "suspend";
         let licenseResult;
         try {
@@ -663,7 +664,7 @@ export async function onRequest({ request, env }) {
       if (!memberRows.length) return response({ error: "Buat/invite member lebih dulu sebelum membuat license." }, 400);
       const expiryDays = json.expiry_days === undefined ? 730 : Number(json.expiry_days);
       const maxAccounts = json.max_accounts === undefined ? 5 : Number(json.max_accounts);
-      if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 3650 || !Number.isInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 5) return response({ error: "Masa aktif harus 1–3650 hari dan slot harus 1–5." }, 400);
+      if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 3650 || !Number.isInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 5) return response({ error: "Masa aktif harus 1-3650 hari dan slot harus 1-5." }, 400);
       if (String(json.product_slug || "quadriga") !== "quadriga") return response({ error: "Produk license belum tersedia." }, 400);
       const internalLegacyValue = randomKey();
       const hash = await digest(internalLegacyValue);
@@ -677,7 +678,7 @@ export async function onRequest({ request, env }) {
       if (json.action === "delete") {
         if (!/^[0-9a-f-]{36}$/i.test(id)) return response({ error: "LICENSE_NOT_FOUND" }, 404);
         const reason = String(json.reason || "").trim();
-        if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan penghapusan wajib diisi (3–300 karakter)." }, 400);
+        if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan penghapusan wajib diisi (3-300 karakter)." }, 400);
         try {
           const deleted = await rpc(env, "helix_admin_delete_license", { p_license_id: id, p_actor_id: session.user.id, p_reason: reason });
           if (!deleted?.ok) return response({ error: deleted?.error_code || "LICENSE_DELETE_FAILED" }, deleted?.error_code === "LICENSE_NOT_FOUND" ? 404 : 400);

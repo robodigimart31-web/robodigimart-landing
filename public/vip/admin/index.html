@@ -1,48 +1,830 @@
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080a0b"><link rel="icon" type="image/svg+xml" href="/vip/favicon.svg"><title>HELIX Admin Panel</title><link rel="stylesheet" href="/vip/portal.css"><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>.admin-stats{grid-template-columns:repeat(4,minmax(0,1fr))}.section{margin-top:14px}.filterbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}.filterbar input,.filterbar select{max-width:270px}.dash-lower{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:13px}.table-action{padding:5px 8px;min-height:28px;font-size:9px}.copy-key{font-family:ui-monospace,monospace;color:#ffe19a;overflow-wrap:anywhere}.key-once{padding:14px;border:1px dashed #c49a3e;border-radius:9px;background:#211a0d;color:#ffe7ae;font-family:ui-monospace,monospace;overflow-wrap:anywhere}.side.active{background:#ffdb79;color:#160e02}@media(max-width:950px){.admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-lower{grid-template-columns:1fr}}@media(max-width:760px){.sidebar .brand{padding-left:8px}.admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.table-action{font-size:9px}}
-</style><script defer src="/vip/helix-ui/js/portal-r1-loader.js?v=member-account-performance-20261012-r2"></script></head><body><div class="shell"><aside class="sidebar" id="sidebar"><div class="brand"><img src="/vip/helix-ui/brand/helix-emblem.webp" alt=""><div class="brand-name">HELIX<span class="brand-sub">ADMIN PANEL</span></div></div><div class="nav-label">Workspace</div><nav class="nav" id="nav"></nav><div class="sidebar-foot">TRADING TECHNOLOGY<br>FOR A SMARTER FUTURE<small>HELIX · Admin Console</small></div></aside><main class="main"><header class="topbar"><button class="mobile-menu" id="menu" aria-label="Buka menu"><img class="hx-icon" src="/vip/helix-ui/icons/menu.svg" alt=""></button><label class="searchbox"><span><img class="hx-icon" src="/vip/helix-ui/icons/search.svg" alt=""></span><input id="search" placeholder="Cari member, license, pengumuman, material…"></label><div class="userbar"><div><div class="user-email" id="who">Memeriksa sesi…</div><span class="role-pill"><img src="/vip/helix-ui/icons/crown.svg" alt=""> Super Admin</span></div><span class="avatar" id="avatar">A</span><button class="btn btn-quiet" type="button" id="edit-own-name" title="Ubah nama profil">Ubah nama</button><button class="btn btn-primary" id="logout">Logout</button></div></header><div class="content" id="content"><div class="empty">Memuat workspace admin…</div></div></main></div><div id="overlay"></div><div id="toast-host"></div>
-<script>
-const sb=supabase.createClient('https://wouwoefzghecuiknznvs.supabase.co','sb_publishable_FDLLBcmYFGiS9PDbyvgDtQ_UWUB8fUc'),$=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),safeUrl=s=>{try{const u=new URL(s);return u.protocol==='https:'?u.href:''}catch{return ''}},fmt=d=>d?new Date(d).toLocaleDateString('id-ID',{dateStyle:'medium'}):'—';let state={page:'Dashboard',data:null};
-const menus=[['Dashboard','home'],['Member','users'],['Performance','chart'],['License & Akun','key'],['Announcement','megaphone'],['Material','book'],['General Settings','settings']];
-function toast(text,error=false){const n=document.createElement('div');n.className='toast'+(error?' error':'');n.textContent=text;document.body.append(n);setTimeout(()=>n.remove(),5000)}
-async function api(path,method='GET',body){const{data:{session}}=await sb.auth.getSession();const r=await fetch('/vip/api/'+path,{method,headers:{authorization:'Bearer '+session.access_token,'content-type':'application/json'},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.message||d.error||'Permintaan gagal');return d}
-async function uploadApi(path,form){const{data:{session}}=await sb.auth.getSession();const r=await fetch('/vip/api/'+path,{method:'POST',headers:{authorization:'Bearer '+session.access_token},body:form});const d=await r.json();if(!r.ok)throw Error(d.error||'Upload gagal');return d}
-function nav(){ $('#nav').innerHTML=menus.map(([name,ico])=>`<button data-page="${name}" class="${name===state.page?'active':''}"><img class="hx-icon" src="/vip/helix-ui/icons/${ico}.svg" alt="">${name}</button>`).join('') }
-function head(icon,title,sub,action=''){return `<div class="panel-head"><div><h2 class="panel-title"><span>${icon}</span>${title}</h2>${sub?`<div class="panel-sub">${sub}</div>`:''}</div>${action}</div>`}
-function hero(){return `<section class="hero"><div class="hero-copy"><div class="eyebrow">HELIX LICENSE OPERATIONS</div><h1>Selamat datang, <span class="gold">Admin</span></h1><p>Kelola member, license, pengumuman, dan material dalam satu panel.</p></div></section>`}
-function badge(status){const s=String(status||'—'),cls=['suspended','revoked','expired'].includes(s)?'bad':s==='active'||s==='published'?'':'warn';return `<span class="status ${cls}">${esc(s)}</span>`}
-function stats(){const d=state.data;return `<section class="stats admin-stats"><article class="stat"><span class="stat-label">Total Member</span><strong class="stat-value">${d.members.length.toLocaleString('id-ID')}</strong><span class="stat-note">Database live</span></article><article class="stat"><span class="stat-label">Total License</span><strong class="stat-value">${d.licenses.length.toLocaleString('id-ID')}</strong><span class="stat-note">License diterbitkan</span></article><article class="stat"><span class="stat-label">Aktivasi Aktif</span><strong class="stat-value">${d.licenses.filter(x=>x.status==='active'&&new Date(x.expires_at)>new Date()).length}</strong><span class="stat-note">Supabase License Store</span></article><article class="stat"><span class="stat-label">Published Content</span><strong class="stat-value">${d.announcements.filter(x=>x.published).length+d.materials.filter(x=>x.published).length}</strong><span class="stat-note">Announcement + Material</span></article></section>`}
-function productAndHealth(){const d=state.data,active=d.licenses.filter(x=>x.status==='active').length,activeBindings=d.bindings.filter(x=>!x.released_at).length;return `<div class="dashboard-grid"><section class="panel product-panel"><div class="eyebrow">HELIX · MT5 EXPERT ADVISOR</div><h2 class="panel-title" style="font-size:25px;margin-top:12px">HELIX QUADRIGA</h2><p>Sistem trading multi-strategi dengan manajemen entitlement, akun, dan license member.</p><span class="status">Portal connected</span></section><section class="panel">${head('▥','Ringkasan Sistem','Status data yang terhubung')}<div class="health-list"><div class="health-row"><span>◉</span><span>HELIX TEAM & Database</span><b>Live</b><div class="bar"><i style="width:100%"></i></div></div><div class="health-row"><span>♙</span><span>Member portal</span><b>${d.members.length}</b><div class="bar"><i style="width:${Math.min(d.members.length*10,100)}%"></i></div></div><div class="health-row"><span>⚿</span><span>License aktif</span><b>${active}/${d.licenses.length}</b><div class="bar"><i style="width:${d.licenses.length?active/d.licenses.length*100:0}%"></i></div></div><div class="health-row"><span>▣</span><span>Akun terikat</span><b>${activeBindings}</b><div class="bar"><i style="width:${Math.min(activeBindings*10,100)}%"></i></div></div></div></section></div>`}
-function memberTable(compact=false){const d=state.data,m=compact?d.members.slice(0,5):d.members;if(!m.length)return `<div class="empty"><strong>Belum ada member</strong>Tambahkan user melalui email undangan Supabase.</div>`;return `<div class="table-wrap"><table><thead><tr><th>Member</th><th>Email</th><th>Role</th><th>Status</th><th>Terdaftar</th><th>Aksi</th></tr></thead><tbody>${m.map(x=>`<tr data-filter-row><td>${esc(x.display_name||'—')}</td><td>${esc(x.email)}</td><td>${badge(x.role)}</td><td>${x.banned_until&&new Date(x.banned_until)>new Date()?badge('suspended'):badge('active')}</td><td>${fmt(x.created_at)}</td><td><div class="row-actions"><button class="btn btn-quiet table-action" data-member-role="${x.id}" data-email="${esc(x.email)}" data-role="${x.role}">${x.role==='admin'?'Jadikan Member':'Jadikan Admin'}</button><button class="btn btn-quiet table-action" data-member-reset="${x.id}" data-email="${esc(x.email)}">Reset</button><button class="btn ${x.banned_until&&new Date(x.banned_until)>new Date()?'':'btn-danger'} table-action" data-member-ban="${x.id}" data-email="${esc(x.email)}" data-banned="${Boolean(x.banned_until&&new Date(x.banned_until)>new Date())}">${x.banned_until&&new Date(x.banned_until)>new Date()?'Pulihkan':'Suspend'}</button><button class="btn btn-danger table-action" data-member-delete="${x.id}" data-email="${esc(x.email)}">Hapus</button></div></td></tr>`).join('')}</tbody></table></div>`}
-function performancePage(){const licenses=state.data.licenses,bindings=state.data.bindings.filter(x=>!x.released_at);return `${pageHead('Performance','Performa setiap member dari telemetry broker yang tersimpan.')}${accountPerformancePanel()}<section class="panel">${head('chart','Trading Performance Member','Profit USD, win rate, profit factor serta growth broker-time.')}<div class="filterbar"><label class="panel-sub">Minggu<input class="input" id="performance-week" type="date"></label><label class="panel-sub">Bulan<input class="input" id="performance-month" type="month"></label><label class="panel-sub">Member ID<input class="input" id="performance-member" placeholder="UUID member"></label><label class="panel-sub">License<select class="input" id="performance-license"><option value="">Semua license</option>${licenses.map(x=>`<option value="${x.id}">${esc(x.license_key_hint)} · ${esc(x.product_slug)}</option>`).join('')}</select></label><label class="panel-sub">Akun<select class="input" id="performance-binding"><option value="">Semua akun</option>${bindings.map(x=>`<option value="${x.id}">${esc(x.broker_server)} · ${esc(String(x.account_login).slice(-4))}</option>`).join('')}</select></label><label class="panel-sub">Cari<input class="input" id="performance-search" type="search" placeholder="Nama atau email"></label></div><div class="notice" id="performance-state" role="status">Memuat ringkasan performa...</div><div id="performance-results"></div><div class="filterbar" style="justify-content:space-between"><span class="panel-sub" id="performance-page-label"></span><div><button class="btn btn-quiet" type="button" data-performance-page="prev">Sebelumnya</button> <button class="btn btn-quiet" type="button" data-performance-page="next">Berikutnya</button></div></div></section>`}
-function accountPerformancePanel(){return `<section class="panel section">${head('chart','Performance per akun MT5','Posisi tertutup dari ledger Production. Waktu broker mulai 1 September 2026; pencocokan dengan History MT5 masih perlu dilakukan.')}<div class="filterbar"><label class="panel-sub">Dari<input class="input" id="account-perf-from" type="date" value="2026-09-01"></label><label class="panel-sub">Sampai (termasuk)<input class="input" id="account-perf-to" type="date"></label><label class="panel-sub">Member<select class="input" id="account-perf-member"><option value="">Semua member</option></select></label><label class="panel-sub">License<select class="input" id="account-perf-license"><option value="">Semua license</option></select></label><label class="panel-sub">Akun<select class="input" id="account-perf-binding"><option value="">Semua akun</option></select></label><button class="btn btn-quiet" type="button" id="account-perf-refresh">Muat ulang</button></div><div class="notice" id="account-perf-state" role="status">Memuat data akun canary...</div><div id="account-perf-results"></div><div class="panel-sub" style="margin-top:9px">Angka berasal dari ledger Production yang lolos validasi server; belum berarti cocok dengan History MT5. Akun demo dan real dipisahkan. Deal yang belum diterima server tidak dihitung.</div></section>`}
-let accountPerformanceRows=[];
-function accountPerformanceTable(rows){if(!rows.length)return '<div class="empty">Tidak ada posisi tertutup terverifikasi untuk filter ini.</div>';return `<div class="table-wrap"><table><thead><tr><th>Member / License</th><th>Broker / Login</th><th>Mode</th><th>Magic Base</th><th>Status</th><th>Last Sync</th><th>Closed Trades</th><th>Win / Loss</th><th>Net Profit</th><th>WR</th><th>PF</th><th>Detail</th></tr></thead><tbody>${rows.map(a=>{const m=a.metrics||{},profit=m.status==='READY'?`$${Number(m.net_pnl_usd).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`:m.status==='UNSUPPORTED_CURRENCY'?'Tidak didukung':'—';return `<tr><td><strong>${esc(a.member_name)}</strong><div class="panel-sub">${esc(a.member_email)}</div><div class="panel-sub">${esc(a.license)}</div></td><td>${esc(a.broker_server)}<div class="panel-sub">${esc(a.account_login)}</div></td><td>${esc(a.mode||'—')}</td><td>${a.magic_base??'—'}</td><td>${badge(a.status)}</td><td>${a.last_sync_at?new Date(a.last_sync_at).toLocaleString('id-ID'):'—'}</td><td>${m.total_closed_trades??0}</td><td>${m.wins??0} / ${m.losses??0}</td><td>${profit}</td><td>${m.winrate==null?'—':`${Number(m.winrate).toFixed(2)}%`}</td><td>${m.profit_factor==null?(m.status==='READY'?'∞':'—'):Number(m.profit_factor).toFixed(4)}</td><td><button class="btn btn-quiet table-action" data-account-performance-detail="${a.binding_id}">Lihat detail</button></td></tr>`}).join('')}</tbody></table></div>`}
-function fillAccountPerformanceFilters(rows){const defs=[['account-perf-member','member_id',x=>`${x.member_name} · ${x.member_email}`],['account-perf-license','license_id',x=>x.license],['account-perf-binding','binding_id',x=>`${x.broker_server} · ${x.account_login} (${x.mode})`]];for(const[id,key,label]of defs){const node=$('#'+id);if(!node)continue;const selected=node.value,unique=[...new Map(rows.map(x=>[x[key],x])).values()];node.innerHTML=`<option value="">Semua ${key==='member_id'?'member':key==='license_id'?'license':'akun'}</option>`+unique.map(x=>`<option value="${esc(x[key])}">${esc(label(x))}</option>`).join('');if(unique.some(x=>x[key]===selected))node.value=selected}}
-function filterAccountPerformance(){const member=$('#account-perf-member')?.value,license=$('#account-perf-license')?.value,binding=$('#account-perf-binding')?.value;return accountPerformanceRows.filter(x=>(!member||x.member_id===member)&&(!license||x.license_id===license)&&(!binding||x.binding_id===binding))}
-async function loadAccountPerformance(){const stateNode=$('#account-perf-state'),host=$('#account-perf-results');if(!stateNode||!host)return;stateNode.textContent='Memuat ledger Production...';stateNode.className='notice';try{const qs=new URLSearchParams({from:$('#account-perf-from')?.value||'2026-09-01'}),to=$('#account-perf-to')?.value;if(to){const d=new Date(`${to}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+1);qs.set('to',d.toISOString().slice(0,10))}const data=await api(`admin/performance/accounts?${qs}`);accountPerformanceRows=data.accounts||[];fillAccountPerformanceFilters(accountPerformanceRows);if(data.applied_filters?.from&&$('#account-perf-from'))$('#account-perf-from').value=data.applied_filters.from.slice(0,10);host.innerHTML=accountPerformanceTable(filterAccountPerformance());stateNode.textContent=data.message||`${accountPerformanceRows.length} akun dari ledger Production · validasi server; belum dicocokkan dengan History MT5 · ${data.status}. Net profit dan PF dikonversi ke USD memakai General Settings.`;stateNode.className=data.status==='WAITING_FOR_EA_R7'?'notice':'notice ok'}catch(error){stateNode.textContent=error.message;stateNode.className='notice error';host.innerHTML=''}}
-async function loadAccountPerformanceDetails(bindingId,page=1){try{const qs=new URLSearchParams({binding_id:bindingId,page:String(page),from:$('#account-perf-from')?.value||'2026-09-01'}),to=$('#account-perf-to')?.value;if(to){const d=new Date(`${to}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+1);qs.set('to',d.toISOString().slice(0,10))}const data=await api(`admin/performance/details?${qs}`),rows=data.trades||[];const trades=rows.map(t=>`<article class="panel" style="margin:8px 0;padding:12px"><strong>${esc(t.symbol)} · Position ${esc(t.position_id)}</strong><div class="panel-sub">${esc(t.opened_at_broker||'—')} → ${esc(t.closed_at_broker||'—')} broker-time · ${esc(t.outcome)} · ${esc(t.currency)} ${Number(t.net_pnl).toFixed(2)}</div><div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Deal Ticket</th><th>Waktu Broker</th><th>Arah / Entry</th><th>Volume</th><th>Profit</th><th>Commission</th><th>Swap</th><th>Fee</th><th>Magic</th></tr></thead><tbody>${(t.deals||[]).map(d=>`<tr><td>${esc(d.deal_ticket)}</td><td>${esc(d.occurred_at_broker)}</td><td>${esc(d.direction)} / ${esc(d.entry_kind)}</td><td>${esc(d.volume)}</td><td>${esc(d.profit)} ${esc(d.currency)}</td><td>${esc(d.commission)}</td><td>${esc(d.swap)}</td><td>${esc(d.fee)}</td><td>${esc(d.magic)}</td></tr>`).join('')}</tbody></table></div></article>`).join('')||'<div class="empty">Belum ada posisi tertutup di ledger untuk akun/periode ini.</div>';$('#overlay').innerHTML=`<div class="modal-backdrop"><section class="modal" style="width:min(1100px,96vw);max-height:90vh;overflow:auto"><header class="modal-head"><div><div class="eyebrow">LEDGER SERVER · BELUM DICOCCOKKAN KE MT5 · ${esc(data.binding.mode)} · MAGIC BASE ${esc(data.binding.magic_base)}</div><h2>${esc(data.binding.broker_server)} · ${esc(data.binding.account_login)}</h2></div><button class="btn btn-quiet" data-close>Tutup</button></header><div class="modal-body">${trades}<div class="filterbar"><span class="panel-sub">Halaman ${data.page}</span><button class="btn btn-quiet" data-account-detail-page="${bindingId}" data-page="${page-1}" ${page<=1?'disabled':''}>Sebelumnya</button><button class="btn btn-quiet" data-account-detail-page="${bindingId}" data-page="${page+1}" ${!data.has_more?'disabled':''}>Berikutnya</button></div></div></section></div>`}catch(error){toast(error.message,true)}}
-function performanceGrowthCell(value){if(!value||value.status==='NO_DATA')return '<span class="panel-sub">Belum ada data</span>';const pnl=value.net_pnl_usd==null?'—':`$${Number(value.net_pnl_usd).toLocaleString('id-ID',{maximumFractionDigits:2})}`,pct=value.growth_pct==null?'Tidak terdefinisi; periode lalu 0':`${value.growth_pct>0?'+':''}${Number(value.growth_pct).toLocaleString('id-ID',{maximumFractionDigits:2})}% vs periode lalu`;return `<strong>${pnl}</strong><div class="panel-sub">${pct}</div>`}
-function renderAdminPerformance(data){const byId=new Map((data.summaries||[]).map(x=>[x.member_id,x]));if(!data.members?.length)return '<div class="empty">Belum ada member untuk filter ini.</div>';const rows=data.members.map(m=>{const row=byId.get(m.id),all=row?.lifetime,ready=all?.status==='READY';return `<tr data-performance-row><td><strong>${esc(m.display_name||'Member')}</strong><div class="panel-sub">${esc(m.email)}</div></td><td>${ready?`$${Number(all.net_pnl_usd).toLocaleString('id-ID',{maximumFractionDigits:2})}`:'-'}</td><td>${ready?`${Number(all.winrate).toLocaleString('id-ID',{maximumFractionDigits:2})}%`:'-'}</td><td>${ready?(all.profit_factor==null?'∞':Number(all.profit_factor).toLocaleString('id-ID',{maximumFractionDigits:4})):'-'}</td><td>${performanceGrowthCell(row?.weekly)}</td><td>${performanceGrowthCell(row?.monthly)}</td></tr>`}).join('');const bars=data.summaries.map(x=>({name:data.members.find(m=>m.id===x.member_id)?.display_name||'Member',pnl:x.lifetime?.net_pnl_usd||0})).sort((a,b)=>b.pnl-a.pnl).slice(0,8),scale=Math.max(1,...bars.map(x=>Math.abs(x.pnl)));return `<div class="panel-sub">All Performance · USD · kurs 1 USD = ${Number(data.currency_rates?.usd_idr_rate||17500).toLocaleString('id-ID')} IDR · ${Number(data.currency_rates?.usc_per_usd||100).toLocaleString('id-ID')} USC = 1 USD</div><div style="display:grid;gap:7px;margin:14px 0">${bars.map(x=>`<div style="display:grid;grid-template-columns:minmax(90px,160px) 1fr auto;gap:9px;align-items:center;font-size:11px"><span>${esc(x.name)}</span><div style="height:18px;background:#171c1f;border-radius:4px;overflow:hidden"><i style="display:block;width:${Math.max(2,Math.abs(x.pnl)/scale*100)}%;height:100%;background:${x.pnl>=0?'#dca532':'#e9656b'}"></i></div><b>$${Number(x.pnl).toLocaleString('id-ID',{maximumFractionDigits:2})}</b></div>`).join('')}</div><div class="table-wrap"><table><thead><tr><th>Member / Email</th><th>Total profit (USD)</th><th>Win rate</th><th>Profit factor</th><th>Minggu terpilih</th><th>Bulan terpilih</th></tr></thead><tbody>${rows}</tbody></table></div><div class="panel-sub" style="margin-top:10px">Statistik sejak 1 September 2026 memakai broker-time. Rate IDR dapat diubah di General Settings. Mata uang tanpa rate USD tidak disertakan dalam agregat.</div>`}
-let performancePageNumber=1,performanceRequest=0;
-function currentWeekStart(){const d=new Date(),weekday=(d.getDay()+6)%7;d.setDate(d.getDate()-weekday);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
-function currentMonthValue(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
-async function loadAdminPerformance(){const host=$('#performance-results'),stateNode=$('#performance-state');if(!host||!stateNode)return;const requestId=++performanceRequest,week=$('#performance-week'),month=$('#performance-month');if(week&&!week.value)week.value=currentWeekStart();if(month&&!month.value)month.value=currentMonthValue();host.innerHTML='';stateNode.textContent='Memuat ringkasan dari database...';try{const qs=new URLSearchParams({page:String(performancePageNumber),week_start:week?.value||currentWeekStart(),month:month?.value||currentMonthValue()});for(const id of ['performance-member','performance-license','performance-binding'])if(document.querySelector('#'+id)?.value)qs.set(id==='performance-member'?'member_id':id==='performance-license'?'license_id':'binding_id',document.querySelector('#'+id).value);const data=await api(`admin/performance?${qs}`);if(requestId!==performanceRequest||!$('#performance-results'))return;if(week)week.value=data.week_start;if(month)month.value=data.month;host.innerHTML=renderAdminPerformance(data);stateNode.textContent=data.status==='WAITING_FOR_EA_R7'?data.message:`Data dari helix_member_performance_summary; minggu mulai ${data.week_start}, bulan ${data.month}; ${data.members.length} dari ${data.total_members} member.`;stateNode.className=data.status==='WAITING_FOR_EA_R7'?'notice':'notice ok';$('#performance-page-label').textContent=`Halaman ${data.page} dari ${data.total_pages} (${data.total_members} member)`;const search=($('#performance-search')?.value||'').toLowerCase();document.querySelectorAll('[data-performance-row]').forEach(row=>row.hidden=!row.textContent.toLowerCase().includes(search));const prev=document.querySelector('[data-performance-page="prev"]'),next=document.querySelector('[data-performance-page="next"]');if(prev)prev.disabled=data.page<=1;if(next)next.disabled=data.page>=data.total_pages}catch(error){if(requestId!==performanceRequest||!$('#performance-results'))return;stateNode.textContent=error.message;stateNode.className='notice error'}}
-function licenseTable(compact=false){const d=state.data,l=compact?d.licenses.slice(0,5):d.licenses;if(!l.length)return `<div class="empty"><strong>Belum ada license</strong>Pilih member dan buat license pertama.</div>`;return `<div class="table-wrap"><table><thead><tr><th>License</th><th>Member</th><th>Produk</th><th>Expiry</th><th>Slot</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${l.map(x=>{const m=d.members.find(y=>y.id===x.member_id),used=d.bindings.filter(b=>b.license_id===x.id&&!b.released_at).length;return `<tr data-filter-row><td class="copy-key">${esc(x.license_key_hint)}</td><td>${esc(m?.email||'—')}</td><td>HELIX ${esc(x.product_slug).toUpperCase()}</td><td>${x.expires_at?fmt(x.expires_at):'Mulai aktivasi'}</td><td>${used}/${x.max_accounts}</td><td>${badge(x.deleted_at?'deleted':x.activation_policy==='first_activation'&&!x.first_activated_at?'pending activation':x.status)}</td><td><div class="row-actions"><button class="btn btn-quiet table-action" data-license-status="${x.id}" data-status="${x.status}" ${x.deleted_at?'disabled':''}>Status</button><button class="btn btn-quiet table-action" data-license-edit="${x.id}" data-expires="${x.expires_at}" data-slots="${x.max_accounts}" data-activation-policy="${x.activation_policy||'legacy_fixed'}" data-first-activated="${x.first_activated_at||''}" data-duration-days="${x.duration_days||730}" ${x.deleted_at?'disabled':''}>Edit</button><button class="btn btn-danger table-action" data-license-delete="${x.id}" ${x.deleted_at?'disabled':''}>${x.deleted_at?'Dihapus':'Hapus'}</button><span class="status warn">OTP entitlement</span></div></td></tr>`}).join('')}</tbody></table></div>`}
-function announcementRows(compact=false){const a=compact?state.data.announcements.slice(0,4):state.data.announcements;if(!a.length)return `<div class="empty"><strong>Belum ada pengumuman</strong>Buat pengumuman untuk member portal.</div>`;return `<div class="table-wrap"><table><thead><tr><th>Judul</th><th>Jenis</th><th>Status</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody>${a.map(x=>`<tr data-filter-row><td><strong>${esc(x.title)}</strong><div class="panel-sub">${esc(x.body).slice(0,100)}</div></td><td>${esc(x.kind)}</td><td>${badge(x.published?'published':'draft')}</td><td>${fmt(x.published_at||x.created_at)}</td><td><div class="row-actions"><button class="btn btn-quiet table-action" data-toggle-content="announcement" data-id="${x.id}" data-published="${x.published}">${x.published?'Unpublish':'Publish'}</button><button class="btn btn-danger table-action" data-content-delete="announcement" data-id="${x.id}">Hapus</button></div></td></tr>`).join('')}</tbody></table></div>`}
-function materialRows(compact=false){const a=compact?state.data.materials.slice(0,4):state.data.materials;if(!a.length)return `<div class="empty"><strong>Belum ada material</strong>Tambahkan panduan atau link file untuk member.</div>`;return `<div class="table-wrap"><table><thead><tr><th>Nama Material</th><th>Jenis</th><th>File / Link</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${a.map(x=>{const url=safeUrl(x.storage_path),privateFile=x.storage_path?.startsWith('helix-vip-materials:');return `<tr data-filter-row><td><strong>${esc(x.title)}</strong><div class="panel-sub">${esc(x.description).slice(0,90)}</div></td><td>${esc(x.kind)}</td><td>${url?`<a class="gold" href="${esc(url)}" target="_blank" rel="noopener">Buka ↗</a>`:privateFile?'File privat':'—'}</td><td>${badge(x.published?'published':'draft')}</td><td><div class="row-actions"><button class="btn btn-quiet table-action" data-toggle-content="material" data-id="${x.id}" data-published="${x.published}">${x.published?'Unpublish':'Publish'}</button><button class="btn btn-danger table-action" data-content-delete="material" data-id="${x.id}">Hapus</button></div></td></tr>`}).join('')}</tbody></table></div>`}
-function dashboard(){return `${hero()}${stats()}${productAndHealth()}<div class="dash-lower"><section class="panel">${head('♙','Manajemen Member','Member dengan akses portal VIP.',`<button class="btn btn-primary" data-modal="member">＋ Tambah Member</button>`)}${memberTable(true)}<button class="btn" data-page="Member" style="margin-top:12px">Lihat semua member →</button></section><section class="panel">${head('⚿','Manajemen License','Entitlement dan akun trading.',`<button class="btn btn-primary" data-modal="license">＋ Create / Assign License</button>`)}${licenseTable(true)}<button class="btn" data-page="License &amp; Performance" style="margin-top:12px">Lihat semua license →</button></section></div><div class="content-grid"><section class="panel">${head('♢','Announcement','Info resmi untuk member.',`<button class="btn btn-primary" data-modal="announcement">＋ Buat</button>`)}${announcementRows(true)}<button class="btn" data-page="Announcement" style="margin-top:11px">Kelola pengumuman →</button></section><section class="panel">${head('▤','Material','Panduan dan tautan download.',`<button class="btn btn-primary" data-modal="material">＋ Tambah</button>`)}${materialRows(true)}<button class="btn" data-page="Material" style="margin-top:11px">Kelola material →</button></section></div>`}
-function page(){const p=state.page;if(p==='Dashboard')return dashboard();if(p==='Member')return `${pageHead(p,'Undang member, atur akses, dan kirim tautan reset password.')}<section class="panel">${head('users','Daftar Member','Invite email akan dikirim oleh HELIX TEAM.',`<button class="btn btn-primary" data-modal="member">+ Tambah Member</button>`)}<div class="filterbar"><input class="input" id="filter" placeholder="Cari nama atau email member"></div>${memberTable()}</section>`;if(p==='Performance')return performancePage();if(p==='License & Akun'||p==='License')return `${pageHead('License & Akun','Kelola license, binding akun MT5, dan riwayat audit.')}<section class="panel">${head('key','License HELIX','Key manual dinonaktifkan; entitlement terhubung lewat pairing OTP.',`<button class="btn btn-primary" data-modal="license">+ Generate License</button>`)}<div class="filterbar"><input class="input" id="filter" placeholder="Cari license atau email member"></div>${licenseTable()}</section><section class="panel section">${head('monitor','Akun MT5 pada license','Reset/release slot melepas binding akun yang dipilih.')}${bindingsTable()}</section><section class="panel section">${head('activity','License Audit','Riwayat perubahan dan sinkronisasi terbaru.')}${eventTable()}</section>`;if(p==='Announcement')return `${pageHead(p,'Informasi versi, maintenance, dan pemberitahuan member.')}<section class="panel">${head('megaphone','Semua Announcement','Publish/unpublish langsung mengatur visibilitas member.',`<button class="btn btn-primary" data-modal="announcement">+ Buat Announcement</button>`)}${announcementRows()}</section>`;return `${pageHead(p,'Materi, panduan instalasi, setup WebRequest, dan link download.')}<section class="panel">${head('book','Semua Material','File disimpan privat di Supabase Storage atau gunakan link HTTPS eksternal.',`<button class="btn btn-primary" data-modal="material">+ Tambah Material</button>`)}${materialRows()}</section>`}
-function pageHead(title,copy){return `<div class="page-title"><div><div class="eyebrow">HELIX ADMIN CONSOLE</div><h1>${title}</h1><p>${copy}</p></div></div>`}
-function bindingsTable(){const d=state.data,b=d.bindings.filter(x=>!x.released_at);if(!b.length)return '<div class="empty">Belum ada akun MT5 yang diikat ke license.</div>';return `<div class="table-wrap"><table><thead><tr><th>Server</th><th>Login</th><th>Member / License</th><th>Mode</th><th>Last Sync</th><th>Aksi</th></tr></thead><tbody>${b.map(x=>{const l=d.licenses.find(y=>y.id===x.license_id),m=d.members.find(y=>y.id===l?.member_id);return `<tr data-filter-row><td>${esc(x.broker_server)}</td><td>${esc(x.account_login)}</td><td>${esc(m?.email||'—')}<div class="panel-sub">${esc(l?.license_key_hint||'')}</div></td><td>${esc(x.mode)}</td><td>${fmt(x.last_sync_at)}</td><td><button class="btn btn-danger table-action" data-release="${l?.id}" data-binding="${x.id}">Lepas slot</button></td></tr>`}).join('')}</tbody></table></div>`}
-function eventTable(){const d=state.data;if(!d.events.length)return '<div class="empty">Belum ada event license tercatat.</div>';return `<div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Peristiwa</th><th>Member / License</th><th>Detail</th></tr></thead><tbody>${d.events.map(e=>{const l=d.licenses.find(x=>x.id===e.license_id),m=d.members.find(x=>x.id===l?.member_id);return `<tr data-filter-row><td>${fmt(e.created_at)}</td><td>${badge(e.event_type)}</td><td>${esc(m?.email||'—')}<div class="panel-sub">${esc(l?.license_key_hint||'')}</div></td><td>${esc(JSON.stringify(e.metadata||{}))}</td></tr>`}).join('')}</tbody></table></div>`}
-function render(){nav();$('#content').innerHTML=page();$('#nav').querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===state.page));if(state.page==='Performance'){loadAdminPerformance();loadAccountPerformance()}else performanceRequest++;}
-async function load(){const{data:{session}}=await sb.auth.getSession();if(!session){location.replace('/vip/login');return}$('#who').textContent=session.user.email||'';$('#avatar').textContent=(session.user.email||'A')[0].toUpperCase();const{data:role,error}=await sb.rpc('helix_current_role');if(error){$('#content').innerHTML='<div class="notice">Gagal memverifikasi role admin.</div>';return}if(role!=='admin'){location.replace('/vip/');return}try{state.data=await api('admin');$('#who').textContent=state.data.admin.display_name||session.user.email||'';$('#avatar').textContent=(state.data.admin.display_name||session.user.email||'A')[0].toUpperCase();render()}catch(e){$('#content').innerHTML=`<div class="notice">${esc(e.message)}</div>`}}
-async function refresh(){state.data=await api('admin');render()}
-function modal(kind){const titles={member:'Undang Member Baru',license:'Create / Assign License HELIX',announcement:'Buat Announcement',material:'Upload Material'};let body='';if(kind==='member')body=`<div class="field"><label>Nama Member</label><input name="display_name" required placeholder="Nama lengkap"></div><div class="field"><label>Email</label><input type="email" name="email" required placeholder="member@email.com"><span class="field-help">Tautan aktivasi dikirim ke email ini melalui HELIX TEAM. Member menentukan password sendiri.</span></div>`;if(kind==='license')body=`<div class="field"><label>Email Member</label><select name="email" required>${state.data.members.filter(x=>x.role==='member').map(x=>`<option value="${esc(x.email)}">${esc(x.display_name||x.email)} · ${esc(x.email)}</option>`).join('')}</select></div><div class="field"><label>Produk</label><select name="product_slug"><option value="quadriga">HELIX QUADRIGA</option></select></div><div class="filterbar"><div class="field"><label>Masa aktif (hari)</label><input type="number" name="expiry_days" value="730" min="1" max="3650" required></div><div class="field"><label>Maksimum slot akun MT5</label><input type="number" name="max_accounts" value="5" min="1" max="5" required></div></div>${state.data.members.filter(x=>x.role==='member').length?'':'<div class="notice">Belum ada member non-admin. Invite member terlebih dahulu.</div>'}`;if(kind==='announcement')body=`<div class="field"><label>Judul</label><input name="title" required maxlength="180"></div><div class="field"><label>Isi pengumuman</label><textarea name="body" required></textarea></div><div class="field"><label>Kategori</label><select name="kind"><option value="update">Pembaruan Produk</option><option value="maintenance">Maintenance</option><option value="information">Informasi</option><option value="general">Umum</option></select></div><label><input type="checkbox" name="published" checked> Terbitkan sekarang</label>`;if(kind==='material')body=`<div class="field"><label>Nama Material</label><input name="title" required maxlength="180"></div><div class="field"><label>Deskripsi</label><textarea name="description"></textarea></div><div class="field"><label>Kategori</label><select name="kind"><option value="video">Video</option><option value="guide">Panduan</option><option value="file">File</option><option value="strategy">Strategi</option></select></div><div class="field"><label>Pilih file (maks. 50 MB)</label><input type="file" name="file" accept=".pdf,.mp4,.zip,.ex5,.png,.jpg,.jpeg,.webp,.txt,.mq5"><span class="field-help">File disimpan di Supabase Storage privat dan hanya bisa diunduh member login.</span></div><div class="field"><label>Atau gunakan URL HTTPS</label><input type="url" name="storage_path" placeholder="https://…"></div><label><input type="checkbox" name="published" checked> Terbitkan sekarang</label>`;$('#overlay').innerHTML=`<div class="modal-backdrop"><form class="modal" id="modal-form" data-kind="${kind}"><header class="modal-head"><div><div class="eyebrow">HELIX ADMIN</div><h2>${titles[kind]}</h2></div><button class="btn btn-quiet" type="button" data-close>✕</button></header><div class="modal-body">${body}<div class="message" id="modal-message" aria-live="polite"></div></div><footer class="modal-foot"><button class="btn btn-quiet" type="button" data-close>Batal</button><button class="btn btn-primary" type="submit" ${kind==='license'&&!state.data.members.some(x=>x.role==='member')?'disabled':''}>${kind==='member'?'Kirim Undangan':kind==='license'?'Generate License':'Simpan'}</button></footer></form></div>`}
-function showKeyOnce(key,title='License dibuat'){ $('#overlay').innerHTML=`<div class="modal-backdrop"><section class="modal"><header class="modal-head"><div><div class="eyebrow">HELIX ENTITLEMENT</div><h2>${title}</h2></div><button class="btn btn-quiet" data-close aria-label="Tutup">Tutup</button></header><div class="modal-body"><div class="notice">License tidak menggunakan key manual. Member menyambungkan akun melalui pairing code sekali pakai dari HELIX ENGINE. License dimulai setelah aktivasi pertama.</div></div><footer class="modal-foot"><button class="btn btn-primary" data-close>Selesai</button></footer></section></div>` }
-async function submitForm(form){const kind=form.dataset.kind,fd=new FormData(form),data=Object.fromEntries([...fd.entries()].filter(([key])=>key!=='file'));data.published=fd.has('published');if(kind==='license')data.idempotency_key=form.dataset.idempotencyKey||(form.dataset.idempotencyKey=crypto.randomUUID());const message=$('#modal-message');const button=form.querySelector('[type=submit]');button.disabled=true;message.textContent='Menyimpan ke server…';try{let path='admin/',r;if(kind==='member'){r=await api(path+'members','POST',data);toast(r.message);$('#overlay').innerHTML='';await refresh();return}if(kind==='license'){r=await api(path+'licenses','POST',data);showKeyOnce(null,'License berhasil ditugaskan');await refresh();return}if(kind==='announcement')await api(path+'announcements','POST',data);if(kind==='material'){const file=fd.get('file');if(file&&file.size){r=await uploadApi(path+'materials',fd)}else{if(data.storage_path&&!data.storage_path.startsWith('https://'))throw Error('Tautan file harus menggunakan HTTPS.');r=await api(path+'materials','POST',data)}}$('#overlay').innerHTML='';toast('Data berhasil disimpan.');await refresh()}catch(e){message.textContent=e.message;message.className='message'}finally{button.disabled=false}}
-document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;try{if(b.id==='menu')$('#sidebar').classList.toggle('open');if(b.dataset.page){state.page=b.dataset.page;render();$('#sidebar').classList.remove('open');scrollTo({top:0,behavior:'smooth'})}if(b.id==='logout'){if(await HelixUI.confirm({title:'Keluar dari Admin Portal?',message:'Sesi admin pada perangkat ini akan diakhiri.',confirmText:'Keluar'})){await sb.auth.signOut();location.replace('/vip/login')}}if(b.id==='edit-own-name'){const values=await HelixUI.modal({title:'Ubah nama profil admin',message:'Nama ini akan tampil pada HELIX Admin Portal.',confirmText:'Lanjutkan',fields:[{name:'display_name',label:'Nama tampilan',type:'text',value:state.data?.admin?.display_name||'',required:true,minLength:2,maxLength:80}]});if(values&&await HelixUI.confirm({title:'Konfirmasi perubahan nama',message:`Nama profil akan diubah menjadi ${values.display_name.trim()}.`,confirmText:'Simpan nama'})){const result=await api('member/profile','PATCH',{display_name:values.display_name});state.data.admin=result.member;$('#who').textContent=result.member.display_name;$('#avatar').textContent=result.member.display_name[0].toUpperCase();toast('Nama profil berhasil diperbarui.')}}if(b.dataset.performancePage){performancePageNumber=Math.max(1,performancePageNumber+(b.dataset.performancePage==='next'?1:-1));loadAdminPerformance()}if(b.dataset.modal)modal(b.dataset.modal);if(b.hasAttribute('data-close'))$('#overlay').innerHTML='';if(b.dataset.memberRole){const next=b.dataset.role==='admin'?'member':'admin',label=next==='admin'?'Admin':'Member';const result=await HelixUI.modal({title:`Ubah role ${b.dataset.email}`,message:`Akun ini akan ${next==='admin'?'mendapat akses ke seluruh menu dan tindakan Admin Portal.':'kehilangan akses Admin Portal dan kembali menjadi member VIP.'} Perubahan dicatat di audit keamanan.`,confirmText:`Jadikan ${label}`,fields:[{name:'reason',label:'Alasan perubahan (wajib untuk audit)',type:'textarea',required:true,minLength:3,maxLength:300}]});if(result){await api(`admin/members/${b.dataset.memberRole}/role`,'PATCH',{role:next,reason:result.reason});toast(`Role ${b.dataset.email} sekarang ${label}.`);await refresh()}}if(b.dataset.memberReset){if(await HelixUI.confirm({title:'Kirim tautan reset password?',message:`HELIX TEAM akan mengirim email reset password ke ${b.dataset.email}.`,confirmText:'Kirim tautan'})){await api('admin/members/'+b.dataset.memberReset,'POST',{action:'reset'});toast('Link reset password dikirim melalui HELIX TEAM.')}}if(b.dataset.memberBan){const banned=b.dataset.banned==='true';const change=await HelixUI.modal({title:banned?'Pulihkan akses member?':'Suspend member?',message:banned?'Akses portal dan license yang sebelumnya aktif akan dipulihkan. Sesi EA lama tetap dicabut.':'Akses portal akan dinonaktifkan, license aktif disuspend, dan sesi EA dicabut.',confirmText:'Lanjutkan',fields:[{name:'reason',label:'Alasan untuk audit (wajib)',type:'textarea',required:true,minLength:3,maxLength:300}]});if(change&&await HelixUI.confirm({title:banned?'Konfirmasi pemulihan akses':'Konfirmasi suspend member',message:banned?'Akses portal dipulihkan. License yang aktif sebelum suspend dipulihkan dan terminal perlu pairing ulang.':'Portal, license aktif, dan sesi EA akan diblokir. EA offline mungkin memakai entitlement tersimpan sampai masa offline-grace berakhir.',confirmText:banned?'Pulihkan akses':'Suspend member',danger:!banned})){await api('admin/members/'+b.dataset.memberBan,'POST',{action:banned?'unsuspend':'suspend',reason:change.reason});toast(banned?'Akses portal dan license dipulihkan; EA harus pairing ulang.':'Member, license aktif, dan sesi EA disuspend.');await refresh()}}if(b.dataset.memberDelete&&await HelixUI.confirm({title:'Hapus member?',message:`Hapus ${b.dataset.email} beserta license dan akun yang terkait? Tindakan ini tidak dapat dibatalkan.`,confirmText:'Hapus permanen',danger:true})){await api('admin/members/'+b.dataset.memberDelete,'DELETE');toast('Member dan data license terkait dihapus.');await refresh()}if(b.dataset.licenseDelete){const license=state.data.licenses.find(x=>x.id===b.dataset.licenseDelete);if(license&&!license.deleted_at){const reason=await HelixUI.prompt({title:'Hapus license member?',message:'License akan dicabut permanen dari penggunaan, seluruh sesi EA dicabut, dan slot akun dilepas. Riwayat audit tetap disimpan.',label:'Alasan penghapusan (wajib)',type:'text',minLength:3,maxLength:300});if(reason&&await HelixUI.confirm({title:'Konfirmasi penghapusan license',message:`License ${license.license_key_hint} tidak dapat dipakai lagi. Semua sesi EA aktif akan dicabut.`,confirmText:'Hapus license',danger:true})){const result=await api('admin/licenses/'+license.id,'PATCH',{action:'delete',reason});toast(`License dihapus; ${result.sessions_revoked} sesi EA dicabut.`);await refresh()}}}if(b.dataset.licenseStatus){const statusResult=await HelixUI.modal({title:'Ubah status license',message:'Perubahan langsung memengaruhi entitlement member. Alasan akan disimpan dalam audit.',confirmText:'Terapkan status',fields:[{name:'status',label:'Status baru',type:'select',value:b.dataset.status,options:['active','suspended','revoked','expired'].map(x=>({value:x,label:x}))},{name:'reason',label:'Alasan perubahan (wajib)',type:'textarea',required:true,minLength:3,maxLength:300}]});if(statusResult){if(!(await HelixUI.confirm({title:'Konfirmasi perubahan license',message:`Status license berubah dari ${b.dataset.status} menjadi ${statusResult.status}.`,confirmText:'Konfirmasi perubahan'})))return;await api('admin/licenses/'+b.dataset.licenseStatus,'PATCH',statusResult);toast('Status license diperbarui.');await refresh()}}if(b.dataset.licenseEdit){const expiryMode=b.dataset.activationPolicy==='first_activation'&&!b.dataset.firstActivated;const fields=[{name:'max_accounts',label:'Maksimum akun MT5 (1–5)',type:'number',value:b.dataset.slots,required:true,min:1,max:5},expiryMode?{name:'duration_days',label:'Masa aktif sejak aktivasi pertama (hari)',type:'number',value:b.dataset.durationDays||730,required:true,min:1,max:3650}:{name:'expires_at',label:'Tanggal expiry baru',type:'date',value:b.dataset.expires.slice(0,10),required:true},{name:'reason',label:'Alasan perubahan (wajib)',type:'textarea',required:true,minLength:3,maxLength:300}];const change=await HelixUI.modal({title:'Edit license',message:'Batas slot dan masa aktif akan diperbarui. Alasan disimpan dalam audit.',confirmText:'Lanjut ke konfirmasi',fields});if(change){const summary=`Slot akun: ${change.max_accounts}. ${expiryMode?`Durasi: ${change.duration_days} hari setelah aktivasi.`:`Expiry: ${change.expires_at}.`} Alasan: ${change.reason}`;if(!(await HelixUI.confirm({title:'Konfirmasi perubahan license',message:summary,confirmText:'Simpan perubahan'})))return;change.max_accounts=Number(change.max_accounts);if(expiryMode)change.duration_days=Number(change.duration_days);else change.expires_at=new Date(change.expires_at+'T23:59:59.000Z').toISOString();await api('admin/licenses/'+b.dataset.licenseEdit,'PATCH',change);toast('Expiry dan batas slot license diperbarui.');await refresh()}}if(b.dataset.licenseKey&&await HelixUI.confirm({title:'Rotasi license key?',message:'Key saat ini akan tidak berlaku dan tidak dapat dipulihkan.',confirmText:'Rotasi key',danger:true})){const r=await api('admin/licenses/'+b.dataset.licenseKey,'PATCH',{action:'rotate-key'});showKeyOnce(r.license_key,'Key license berhasil dirotasi');await refresh()}if(b.dataset.release){const detail=await HelixUI.prompt({title:'Lepas akun MT5',message:'Slot license akan tersedia kembali dan sesi terminal terkait dicabut. Masukkan alasan untuk audit.',label:'Alasan (minimal 3 karakter)',type:'text'});if(detail&&await HelixUI.confirm({title:'Konfirmasi pelepasan slot',message:'Binding akun MT5 akan dicabut dari license.',confirmText:'Lepas slot',danger:true})){await api('admin/licenses/'+b.dataset.release,'PATCH',{action:'release-slot',binding_id:b.dataset.binding,reason:detail});toast('Slot akun dilepas.');await refresh()}}if(b.dataset.toggleContent){const entity=b.dataset.toggleContent,id=b.dataset.id,publishing=b.dataset.published!=='true';if(await HelixUI.confirm({title:publishing?'Publikasikan konten?':'Tarik publikasi?',message:publishing?'Konten akan terlihat oleh seluruh member VIP.':'Konten tidak lagi terlihat oleh member VIP.',confirmText:publishing?'Publikasikan':'Tarik publikasi'})){await api(`admin/${entity==='announcement'?'announcements':'materials'}/${id}`,'PATCH',{published:publishing});toast('Status publikasi diperbarui.');await refresh()}}if(b.dataset.contentDelete){const entity=b.dataset.contentDelete==='announcement'?'announcements':'materials';if(await HelixUI.confirm({title:'Hapus konten?',message:'Item ini akan dihapus dan tidak bisa dipulihkan.',confirmText:'Hapus permanen',danger:true})){await api(`admin/${entity}/${b.dataset.id}`,'DELETE');toast('Konten dihapus.');await refresh()}}if(b.dataset.copyKey){await navigator.clipboard.writeText(b.dataset.copyKey);toast('License key disalin.')} }catch(err){toast(err.message,true)}});
-document.addEventListener('change',e=>{if(['performance-week','performance-month','performance-member','performance-license','performance-binding'].includes(e.target.id)){performancePageNumber=1;loadAdminPerformance()}});
-document.addEventListener('change',e=>{if(['account-perf-member','account-perf-license','account-perf-binding'].includes(e.target.id)){const host=$('#account-perf-results');if(host)host.innerHTML=accountPerformanceTable(filterAccountPerformance())}if(['account-perf-from','account-perf-to'].includes(e.target.id))loadAccountPerformance()});
-document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='account-perf-refresh')loadAccountPerformance();if(b.dataset.accountPerformanceDetail)loadAccountPerformanceDetails(b.dataset.accountPerformanceDetail);if(b.dataset.accountDetailPage)loadAccountPerformanceDetails(b.dataset.accountDetailPage,Number(b.dataset.page||1))});document.addEventListener('input',e=>{if(e.target.id==='performance-search'){const value=e.target.value.toLowerCase();document.querySelectorAll('[data-performance-row]').forEach(row=>row.hidden=!row.textContent.toLowerCase().includes(value))}});document.addEventListener('submit',e=>{if(e.target.id==='modal-form'){e.preventDefault();submitForm(e.target)}});document.addEventListener('click',e=>{if(e.target.classList.contains('modal-backdrop'))$('#overlay').innerHTML=''});$('#search').addEventListener('input',e=>{const term=e.target.value.toLowerCase();document.querySelectorAll('[data-filter-row]').forEach(r=>r.hidden=!r.textContent.toLowerCase().includes(term))});load();
-</script><script defer src="/vip/admin/settings.js?v=member-account-performance-20261012-r2"></script></body></html>
+const DEFAULT_SUPABASE_URL = "https://wouwoefzghecuiknznvs.supabase.co";
+import { hmac, rateLimit, readJson as readBoundedJson, rpc, sha256, verifiedUser } from "../../_shared/portal.js";
+
+const response = (body, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+});
+
+async function supabase(env, path, { method = "GET", body, token } = {}) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("Cloudflare Pages secret SUPABASE_SERVICE_ROLE_KEY is not configured.");
+  const headers = { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" };
+  if (method !== "GET") headers.prefer = "return=representation";
+  if (token) headers["x-authorization"] = `Bearer ${token}`;
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/rest/v1/${path}`, {
+    method, headers, body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await result.text();
+  if (!result.ok) throw new Error(`Database request failed (${result.status}): ${text.slice(0, 350)}`);
+  return text ? JSON.parse(text) : null;
+}
+
+async function telemetryCanaryMembers(env) {
+  const grants = await supabase(env, `helix_telemetry_canary_allowlist?expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
+  const bindingIds = [...new Set(grants.map(row => row.binding_id).filter(Boolean))];
+  if (!bindingIds.length) return new Set();
+  const bindings = await supabase(env, `helix_license_bindings?id=in.(${bindingIds.join(",")})&select=license_id`);
+  const licenseIds = [...new Set(bindings.map(row => row.license_id).filter(Boolean))];
+  if (!licenseIds.length) return new Set();
+  const licenses = await supabase(env, `helix_licenses?id=in.(${licenseIds.join(",")})&select=member_id`);
+  return new Set(licenses.map(row => row.member_id).filter(Boolean));
+}
+
+async function listLicenses(env, filter = "") {
+  const base = `helix_licenses?${filter ? `${filter}&` : ""}select=id,member_id,product_slug,status,expires_at,max_accounts,created_at,issued_at,first_activated_at,duration_days,activation_policy,last_successful_sync_at,entitlement_version,deleted_at&order=created_at.desc`;
+  try { return await supabase(env, base); }
+  catch {
+    const legacy = `helix_licenses?${filter ? `${filter}&` : ""}select=id,member_id,product_slug,status,expires_at,max_accounts,created_at&order=created_at.desc`;
+    return (await supabase(env, legacy)).map(item => ({ ...item, activation_policy: "legacy_fixed", first_activated_at: null, issued_at: item.created_at, duration_days: null, last_successful_sync_at: null, entitlement_version: null, deleted_at: null }));
+  }
+}
+
+async function authUser(token, env) {
+  if (!token) return null;
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: env.SUPABASE_PUBLISHABLE_KEY || "sb_publishable_FDLLBcmYFGiS9PDbyvgDtQ_UWUB8fUc", authorization: `Bearer ${token}` },
+  });
+  if (!result.ok) return null;
+  return result.json();
+}
+
+async function requireUser(request, env, admin = false) {
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const user = await authUser(token, env);
+  if (!user?.id) return { error: response({ error: "Sesi login sudah berakhir. Silakan masuk kembali." }, 401) };
+  const rows = await supabase(env, `helix_members?id=eq.${encodeURIComponent(user.id)}&select=id,email,display_name,role`);
+  const member = rows?.[0];
+  if (!member) return { error: response({ error: "Profil member belum tersedia." }, 403) };
+  let suspensions = [];
+  try { suspensions = await supabase(env, `helix_member_suspensions?member_id=eq.${encodeURIComponent(user.id)}&select=member_id&limit=1`); }
+  catch (error) { if (!error?.message?.includes("DATABASE_HTTP_404") && !error?.message?.includes("Database request failed (404)")) throw error; }
+  if (suspensions.length) return { error: response({ error: "MEMBER_SUSPENDED", message: "Akses akun HELIX ini sedang disuspend. Hubungi HELIX TEAM." }, 403) };
+  if (admin && member.role !== "admin") return { error: response({ error: "Akses admin diperlukan." }, 403) };
+  return { user, member };
+}
+
+async function digest(value) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+
+async function currencyUsdRates(env) {
+  const rows = await supabase(env, "helix_general_settings?setting_key=in.(usd_idr_rate,usc_per_usd,currency_usd_rates)&select=setting_key,setting_value");
+  const settings = Object.fromEntries((rows || []).map(row => [row.setting_key, row.setting_value]));
+  const idr = Number(settings.usd_idr_rate ?? 17500), usc = Number(settings.usc_per_usd ?? 100);
+  const extra = settings.currency_usd_rates && typeof settings.currency_usd_rates === "object" ? settings.currency_usd_rates : {};
+  const rates = { USD: 1, IDR: 1 / idr, USC: 1 / usc };
+  for (const [code, rate] of Object.entries(extra)) if (/^[A-Z]{3,6}$/.test(code) && Number.isFinite(Number(rate)) && Number(rate) > 0) rates[code] = Number(rate);
+  return { rates, display: { usd_idr_rate: idr, usc_per_usd: usc, currency_usd_rates: extra } };
+}
+
+function usdMetrics(raw, rates) {
+  const buckets = new Map();
+  for (const row of raw?.by_currency || []) {
+    const old = buckets.get(row.currency) || { currency: row.currency, trades: 0, wins: 0, losses: 0, break_even: 0, gross_profit: 0, gross_loss: 0, net_pnl: 0, last_sync_at: null };
+    for (const key of ["trades", "wins", "losses", "break_even"]) old[key] += Number(row[key] || 0);
+    for (const key of ["gross_profit", "gross_loss", "net_pnl"]) old[key] += Number(row[key] || 0);
+    if (row.last_sync_at && (!old.last_sync_at || row.last_sync_at > old.last_sync_at)) old.last_sync_at = row.last_sync_at;
+    buckets.set(row.currency, old);
+  }
+  const currencies = [...buckets.values()], included = currencies.filter(x => rates[x.currency] != null), excluded = currencies.filter(x => rates[x.currency] == null).map(x => x.currency);
+  if (!included.length) return { status: currencies.length ? "UNSUPPORTED_CURRENCY" : "NO_DATA", total_closed_trades: 0, unsupported_currencies: excluded, currencies, last_sync_at: raw?.last_sync_at || null };
+  const total = key => included.reduce((sum, x) => sum + x[key], 0);
+  const trades = total("trades"), wins = total("wins"), losses = total("losses"), be = total("break_even");
+  const net = included.reduce((sum, x) => sum + x.net_pnl * rates[x.currency], 0);
+  const grossProfit = included.reduce((sum, x) => sum + x.gross_profit * rates[x.currency], 0);
+  const grossLoss = included.reduce((sum, x) => sum + x.gross_loss * rates[x.currency], 0);
+  return { status: "READY", total_closed_trades: trades, wins, losses, break_even: be, winrate: trades ? Math.round(wins / trades * 10000) / 100 : null, profit_factor: grossLoss ? Math.round(grossProfit / grossLoss * 10000) / 10000 : null, net_pnl_usd: Math.round(net * 100) / 100, gross_profit_usd: Math.round(grossProfit * 100) / 100, gross_loss_usd: Math.round(grossLoss * 100) / 100, currencies, unsupported_currencies: excluded, last_sync_at: raw?.last_sync_at || null };
+}
+
+function brokerBound(value) {
+  if (!value) return null;
+  const match = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}:\d{2}))?$/.exec(value);
+  if (!match) return undefined;
+  const normalized = `${match[1]}T${match[2] || "00:00:00"}`;
+  const date = new Date(`${normalized}Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 19) === normalized ? normalized : undefined;
+}
+
+function performanceWindowStart(now = new Date()) {
+  const sixMonths = new Date(now.getTime());
+  const day = sixMonths.getUTCDate();
+  sixMonths.setUTCDate(1);
+  sixMonths.setUTCMonth(sixMonths.getUTCMonth() - 6);
+  const lastDay = new Date(Date.UTC(sixMonths.getUTCFullYear(), sixMonths.getUTCMonth() + 1, 0)).getUTCDate();
+  sixMonths.setUTCDate(Math.min(day, lastDay));
+  const rolling = `${sixMonths.toISOString().slice(0, 10)}T00:00:00`;
+  return rolling > "2026-09-01T00:00:00" ? rolling : "2026-09-01T00:00:00";
+}
+
+function boundedPerformanceFrom(value, now = new Date()) {
+  const requested = brokerBound(value);
+  if (requested === undefined) return undefined;
+  const cutoff = performanceWindowStart(now);
+  return requested && requested > cutoff ? requested : cutoff;
+}
+
+function randomKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(18));
+  const value = [...bytes].map(x => x.toString(16).padStart(2, "0").toUpperCase()).join("");
+  return `HELIX-QUA-${value.slice(0, 8)}-${value.slice(8, 16)}-${value.slice(16, 24)}-${value.slice(24, 32)}`;
+}
+
+async function adminAuth(env, path, method, body) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("Cloudflare Pages secret SUPABASE_SERVICE_ROLE_KEY is not configured.");
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/auth/v1/${path}`, {
+    method,
+    headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await result.text();
+  if (!result.ok) throw new Error(text.slice(0, 500));
+  return text ? JSON.parse(text) : null;
+}
+
+function portalBaseUrl(env) {
+  const value = String(env.PORTAL_PUBLIC_URL || "https://www.robodigimart.com").replace(/\/+$/, "");
+  const url = new URL(value);
+  const allowedHost = url.hostname === "robodigimart.com" || url.hostname.endsWith(".robodigimart.com") || url.hostname.endsWith(".pages.dev");
+  if (url.protocol !== "https:" || !allowedHost) throw new Error("PORTAL_PUBLIC_URL is not an allowed HTTPS portal origin.");
+  return url.origin;
+}
+
+async function storageRequest(env, path, { method = "GET", body, contentType = "application/json" } = {}) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/storage/v1/${path}`, {
+    method,
+    headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": contentType },
+    body,
+  });
+  const text = await result.text();
+  if (!result.ok) throw new Error(`Storage request failed (${result.status}): ${text.slice(0, 300)}`);
+  return text ? JSON.parse(text) : null;
+}
+
+export async function onRequest({ request, env }) {
+  try {
+    const url = new URL(request.url);
+    const pathname = url.pathname.replace(/^\/vip\/api\/?/, "");
+    const method = request.method;
+    const licenseRoute = pathname === "admin/licenses" || pathname.startsWith("admin/licenses/") || pathname.startsWith("member/bindings/");
+    const emailRoute = pathname.startsWith("member/email-change-requests") || pathname.startsWith("admin/email-change-requests");
+    const otpRoute = pathname.startsWith("member/pairings/");
+    const performanceRoute = pathname === "member/performance" || pathname === "member/performance/accounts";
+    if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
+    if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
+    if (otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
+    const otpCanary = otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED === "true";
+    const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+    const performanceCanary = env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
+    if (performanceRoute && !performanceGlobal && !performanceCanary) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
+    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname.startsWith("member/performance") || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests") || pathname.startsWith("admin/settings");
+    const earlySession = earlyAuthRoute ? await verifiedUser(request, env, pathname.startsWith("admin/")) : null;
+    if (earlySession?.error) return earlySession.error;
+    const isMultipart = request.headers.get("content-type")?.includes("multipart/form-data");
+    const form = isMultipart ? await request.formData() : null;
+    let json = {};
+    if (method !== "GET" && method !== "DELETE") {
+      if (earlyAuthRoute) json = await readBoundedJson(request, 8_192);
+      else json = form ? Object.fromEntries([...form.entries()].filter(([key]) => key !== "file")) : await request.json();
+    }
+
+    if (pathname === "member" && method === "GET") {
+      const session = await requireUser(request, env);
+      if (session.error) return session.error;
+      const id = encodeURIComponent(session.user.id);
+      const [licenses, announcements, materials] = await Promise.all([
+        listLicenses(env, `member_id=eq.${id}&deleted_at=is.null`),
+        supabase(env, "helix_announcements?published=eq.true&select=id,title,body,kind,published_at,created_at&order=published_at.desc.nullslast"),
+        supabase(env, "helix_materials?published=eq.true&select=id,title,description,kind,storage_path,created_at&order=created_at.desc"),
+      ]);
+      for (const license of licenses) {
+        license.effective_status = license.status !== "active" ? license.status.toUpperCase() : license.expires_at && Date.parse(license.expires_at) <= Date.now() ? "EXPIRED" : license.activation_policy === "first_activation" && !license.first_activated_at ? "PENDING ACTIVATION" : "ACTIVE";
+      }
+      const licenseIds = licenses.map(x => x.id);
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&released_at=is.null&select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at`) : [];
+      const events = licenseIds.length ? await supabase(env, `helix_license_events?license_id=in.(${licenseIds.join(",")})&select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100`) : [];
+      let emailChangeRequests = [];
+      try { emailChangeRequests = await supabase(env, `helix_email_change_requests?member_id=eq.${id}&select=id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&order=created_at.desc&limit=20`); } catch { /* migration pending: keep existing member pages available */ }
+      return response({ member: session.member, licenses, bindings, events, announcements, materials, emailChangeRequests });
+    }
+
+    if (pathname === "member/profile" && method === "PATCH") {
+      const session = earlySession;
+      const displayName = String(json.display_name || "").trim().replace(/\s+/g, " ");
+      if (displayName.length < 2 || displayName.length > 80 || /[\u0000-\u001f\u007f]/.test(displayName)) return response({ error: "Nama harus 2-80 karakter dan tidak boleh berisi karakter kontrol." }, 400);
+      const updated = await supabase(env, `helix_members?id=eq.${encodeURIComponent(session.user.id)}&select=id,email,display_name,role`, { method: "PATCH", body: { display_name: displayName } });
+      if (!updated?.[0]) return response({ error: "Profil member tidak ditemukan." }, 404);
+      return response({ ok: true, member: updated[0] });
+    }
+
+    if (pathname === "admin/settings" && method === "GET") {
+      const rows = await supabase(env, "helix_general_settings?setting_key=in.(usd_idr_rate,usc_per_usd,currency_usd_rates)&select=setting_key,setting_value,updated_at,change_reason");
+      const values = Object.fromEntries(rows.map(row => [row.setting_key, row.setting_value]));
+      return response({ usd_idr_rate: Number(values.usd_idr_rate || 17500), usc_per_usd: Number(values.usc_per_usd || 100), currency_usd_rates: values.currency_usd_rates || {}, updated_at: Math.max(0, ...rows.map(row => Date.parse(row.updated_at) || 0)) ? new Date(Math.max(...rows.map(row => Date.parse(row.updated_at) || 0))).toISOString() : null });
+    }
+    if (pathname === "admin/settings" && method === "PATCH") {
+      if (json.confirmed !== true) return response({ error: "CONFIRMATION_REQUIRED" }, 400);
+      const idr = Number(json.usd_idr_rate), usc = Number(json.usc_per_usd), reason = String(json.reason || "").trim();
+      const extra = json.currency_usd_rates ?? {};
+      if (!Number.isFinite(idr) || idr < 1 || idr > 1e9 || !Number.isFinite(usc) || usc < 1 || usc > 1e6 || reason.length < 3 || reason.length > 300 || !extra || typeof extra !== "object" || Array.isArray(extra)) return response({ error: "INVALID_SETTINGS" }, 400);
+      const rates = {};
+      for (const [code, raw] of Object.entries(extra)) {
+        const factor = Number(raw);
+        if (!/^[A-Z]{3,6}$/.test(code) || ["USD", "IDR", "USC"].includes(code) || !Number.isFinite(factor) || factor <= 0 || factor > 1e6) return response({ error: "INVALID_CURRENCY_RATE", currency: code }, 400);
+        rates[code] = factor;
+      }
+      const values = [["usd_idr_rate", idr], ["usc_per_usd", usc], ["currency_usd_rates", rates]];
+      for (const [key, value] of values) {
+        const saved = await supabase(env, `helix_general_settings?setting_key=eq.${encodeURIComponent(key)}`, { method: "PATCH", body: { setting_value: value, updated_at: new Date().toISOString(), updated_by: earlySession.user.id, change_reason: reason } });
+        if (!saved?.length) return response({ error: "SETTING_SAVE_FAILED", setting: key }, 503);
+      }
+      return response({ ok: true, usd_idr_rate: idr, usc_per_usd: usc, currency_usd_rates: rates, message: "Pengaturan dan alasan perubahan berhasil disimpan." });
+    }
+
+    if (pathname === "member/pairings/lookup" && method === "POST") {
+      const session = earlySession;
+      await rateLimit(request, env, "pair_lookup", `${request.headers.get("cf-connecting-ip") || "unknown"}:${session.user.id}`, 15, 600);
+      const code = String(json.pairing_code || "").trim();
+      const licenseId = String(json.license_id || "");
+      if (!/^\d{8}$/.test(code) || !/^[0-9a-f-]{36}$/i.test(licenseId)) return response({ error: "INVALID_PAIRING" }, 400);
+      const result = await rpc(env, "helix_pairing_lookup", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_member_id: session.user.id, p_license_id: licenseId, p_canary: otpCanary });
+      if (!result?.ok) return response({ error: result?.error_code || "INVALID_PAIRING" }, 400);
+      return response({ pairing: result });
+    }
+
+    if (pathname === "member/pairings/approve" && method === "POST") {
+      const session = earlySession;
+      await rateLimit(request, env, "pair_approve", `${request.headers.get("cf-connecting-ip") || "unknown"}:${session.user.id}`, 8, 600);
+      const code = String(json.pairing_code || "").trim();
+      const licenseId = String(json.license_id || "");
+      if (!/^\d{8}$/.test(code) || !/^[0-9a-f-]{36}$/i.test(licenseId) || json.confirmed !== true) return response({ error: "CONFIRMATION_REQUIRED" }, 400);
+      const result = await rpc(env, "helix_pairing_approve", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_license_id: licenseId, p_member_id: session.user.id, p_actor_id: session.user.id, p_canary: otpCanary });
+      if (!result?.ok) return response({ error: result?.error_code || "PAIRING_REJECTED" }, 400);
+      return response({ ok: true, state: result.state, binding_id: result.binding_id, message: "Akun MT5 berhasil dipasangkan. EA akan menerima entitlement saat polling berikutnya." });
+    }
+
+    if (pathname === "member/performance/accounts" && method === "GET") {
+      const session = earlySession;
+      await rateLimit(request, env, "member_performance_accounts", session.user.id, 20, 60);
+      const fromValue = url.searchParams.get("from");
+      const toValue = brokerBound(url.searchParams.get("to"));
+      const from = boundedPerformanceFrom(fromValue);
+      if (from === undefined || toValue === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_DATE_RANGE" }, 400);
+      const licenseRows = await supabase(env, `helix_licenses?member_id=eq.${encodeURIComponent(session.user.id)}&deleted_at=is.null&select=id,product_slug,status,expires_at,license_key_hint`);
+      const licenseById = new Map(licenseRows.map(item => [item.id, item]));
+      const licenseIds = [...licenseById.keys()];
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&released_at=is.null&select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,first_seen_at&order=first_seen_at.desc`) : [];
+      const bindingIds = bindings.map(item => item.id);
+      const [sessions, { rates, display: fxDisplay }] = await Promise.all([
+        bindingIds.length ? supabase(env, `helix_license_sessions?binding_id=in.(${bindingIds.join(",")})&select=binding_id,last_telemetry_sync_at&order=last_telemetry_sync_at.desc&limit=5000`) : Promise.resolve([]),
+        currencyUsdRates(env),
+      ]);
+      const canaryMembers = !performanceGlobal && performanceCanary ? await telemetryCanaryMembers(env) : new Set();
+      const latestTelemetrySync = new Map();
+      for (const item of sessions) if (item.last_telemetry_sync_at && (!latestTelemetrySync.has(item.binding_id) || item.last_telemetry_sync_at > latestTelemetrySync.get(item.binding_id))) latestTelemetrySync.set(item.binding_id, item.last_telemetry_sync_at);
+      const accounts = await Promise.all(bindings.map(async binding => {
+        const license = licenseById.get(binding.license_id);
+        const included = performanceGlobal || (performanceCanary && canaryMembers.has(session.user.id));
+        const metrics = included
+          ? usdMetrics(await rpc(env, performanceGlobal ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2", { p_member_id: session.user.id, p_license_id: license.id, p_binding_id: binding.id, p_from: from, p_to: toValue }), rates)
+          : { status: "NOT_IN_CANARY", total_closed_trades: 0, wins: 0, losses: 0, break_even: 0, winrate: null, profit_factor: null, net_pnl_usd: null, unsupported_currencies: [] };
+        return {
+          binding_id: binding.id,
+          license_id: binding.license_id,
+          product_slug: license.product_slug,
+          license_status: license.status,
+          broker_server: binding.broker_server,
+          account_login: binding.account_login,
+          mode: binding.mode,
+          magic_base: binding.magic_base,
+          last_telemetry_sync_at: latestTelemetrySync.get(binding.id) || null,
+          capture_scope: performanceGlobal ? "GLOBAL" : included ? "CANARY" : "NOT_IN_CANARY",
+          metrics: { ...metrics, last_sync_at: latestTelemetrySync.get(binding.id) || null },
+        };
+      }));
+      return response({ status: performanceGlobal ? "READY" : performanceCanary ? "CANARY" : "WAITING_FOR_EA_R7", accounts, currency_rates: fxDisplay, from, to: toValue, earliest_supported_date: "2026-09-01T00:00:00", message: performanceGlobal ? null : "Performance Global masih OFF. Seluruh akun milik member canary yang diizinkan-demo maupun real-termasuk binding baru dicakup selama grant canary berlaku." });
+    }
+
+    if (pathname === "member/performance" && method === "GET") {
+      const session = earlySession;
+      await rateLimit(request, env, "member_performance", session.user.id, 30, 60);
+      const uuid = /^[0-9a-f-]{36}$/i;
+      const licenseId = url.searchParams.get("license_id");
+      const bindingId = url.searchParams.get("binding_id");
+      const fromValue = url.searchParams.get("from");
+      const toValue = url.searchParams.get("to");
+      const family = url.searchParams.get("family");
+      if ((licenseId && !uuid.test(licenseId)) || (bindingId && !uuid.test(bindingId)) || (family && family !== "unclassified")) return response({ error: "INVALID_FILTER" }, 400);
+      const from = boundedPerformanceFrom(fromValue), to = brokerBound(toValue);
+      if ((fromValue && from === undefined) || (toValue && to === undefined) || (from && to && from >= to)) return response({ error: "INVALID_DATE_RANGE" }, 400);
+      if (from && to && Date.parse(`${to}Z`) - Date.parse(`${from}Z`) > 366 * 86400000) return response({ error: "INVALID_DATE_RANGE" }, 400);
+      const licenseRows = await supabase(env, `helix_licenses?member_id=eq.${encodeURIComponent(session.user.id)}&deleted_at=is.null&select=id`);
+      const ownedLicenseIds = licenseRows.map(item => item.id);
+      if (licenseId && !ownedLicenseIds.includes(licenseId)) return response({ error: "INVALID_FILTER" }, 403);
+      if (bindingId) {
+        const owned = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&license_id=in.(${ownedLicenseIds.join(",")})&released_at=is.null&select=id`) : [];
+        if (!owned.length) return response({ error: "INVALID_FILTER" }, 403);
+      }
+      const allowedBindings = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${ownedLicenseIds.join(",")})&released_at=is.null&select=id`) : [];
+      if (!performanceGlobal) {
+        const canaryMembers = await telemetryCanaryMembers(env);
+        if (!canaryMembers.has(session.user.id)) return response({ status: "WAITING_FOR_EA_R7", message: "Performa canary hanya tersedia untuk member testing yang diizinkan." }, 200);
+      }
+      const [raw, daily, currency] = await Promise.all([
+        rpc(env, performanceGlobal ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2", { p_member_id: session.user.id, p_license_id: licenseId, p_binding_id: bindingId, p_from: from || null, p_to: to || null }),
+        rpc(env, performanceGlobal ? "helix_member_performance_daily_v2" : "helix_member_performance_canary_daily_v2", { p_member_id: session.user.id, p_license_id: licenseId, p_binding_id: bindingId, p_from: from || null, p_to: to || null }),
+        currencyUsdRates(env),
+      ]);
+      const metrics = usdMetrics(raw, currency.rates);
+      const chart = (daily || []).filter(item => currency.rates[item.currency] != null).map(item => ({ date: item.broker_date, net_pnl_usd: Number(item.net_pnl) * currency.rates[item.currency], trades: item.trades }));
+      return response({ ...metrics, chart, currency_rates: currency.display, time_basis: "BROKER_SERVER", from: from || "2026-09-01T00:00:00", to });
+    }
+
+    if (pathname === "member/email-change-requests" && method === "GET") {
+      const session = earlySession;
+      const requests = await supabase(env, `helix_email_change_requests?member_id=eq.${encodeURIComponent(session.user.id)}&select=id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&order=created_at.desc&limit=20`);
+      return response({ requests });
+    }
+
+    if (pathname === "member/email-change-requests" && method === "POST") {
+      const session = earlySession;
+      const email = String(json.new_email || "").trim().toLowerCase();
+      const note = String(json.note || "").trim().slice(0, 300);
+      const result = await rpc(env, "helix_email_change_request", { p_member_id: session.user.id, p_new_email: email, p_note: note });
+      return result?.ok ? response(result, 201) : response({ error: result?.error_code || "REQUEST_REJECTED" }, 400);
+    }
+
+    if (pathname === "admin/email-change-requests" && method === "GET") {
+      const requests = await supabase(env, "helix_email_change_requests?select=id,member_id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&status=in.(pending,approved_awaiting_verification)&order=created_at.asc&limit=200");
+      const members = await supabase(env, "helix_members?select=id,display_name,email");
+      const byId = new Map(members.map(member => [member.id, member]));
+      return response({ requests: requests.map(item => ({ ...item, member: byId.get(item.member_id) || null })) });
+    }
+
+    if (pathname.startsWith("admin/email-change-requests/") && method === "POST") {
+      const requestId = pathname.split("/").at(-1);
+      if (!/^[0-9a-f-]{36}$/i.test(requestId) || !["approve", "reject"].includes(json.action)) return response({ error: "INVALID_REQUEST" }, 400);
+      const rows = await supabase(env, `helix_email_change_requests?id=eq.${encodeURIComponent(requestId)}&select=id,member_id,new_email,status`);
+      const item = rows?.[0];
+      if (!item) return response({ error: "REQUEST_NOT_FOUND" }, 404);
+      const decision = await rpc(env, "helix_email_change_decide", { p_request_id: requestId, p_actor_id: earlySession.user.id, p_approve: json.action === "approve", p_note: String(json.note || "").slice(0, 300) });
+      if (!decision?.ok) return response({ error: decision?.error_code || "REQUEST_REJECTED" }, 400);
+      return response({ ok: true, status: json.action === "approve" ? "approved_awaiting_verification" : "rejected", message: json.action === "approve" ? "Disetujui. Member perlu memulai verifikasi alamat baru dari menu profil." : "Permintaan ditolak." });
+    }
+
+    if (pathname.startsWith("member/bindings/") && method === "POST") {
+      const session = await requireUser(request, env);
+      if (session.error) return session.error;
+      const bindingId = pathname.split("/").at(-1);
+      if (!/^[0-9a-f-]{36}$/i.test(bindingId)) return response({ error: "BINDING_NOT_FOUND" }, 404);
+      const result = await rpc(env, "helix_release_binding", { p_member_id: session.user.id, p_binding_id: bindingId, p_actor_id: session.user.id, p_reason: String(json.reason || "Member requested release") });
+      return result?.ok ? response({ ok: true, ...result }) : response({ error: result?.error_code || "RELEASE_REJECTED" }, 404);
+    }
+
+    if (pathname === "admin" && method === "GET") {
+      const session = await requireUser(request, env, true);
+      if (session.error) return session.error;
+      const [members, licenses, bindings, events, announcements, materials, authUsers] = await Promise.all([
+        supabase(env, "helix_members?select=id,email,display_name,role,created_at&order=created_at.desc"),
+        listLicenses(env),
+        supabase(env, "helix_license_bindings?select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at&order=first_seen_at.desc"),
+        supabase(env, "helix_license_events?select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100"),
+        supabase(env, "helix_announcements?select=id,title,body,kind,published,published_at,created_at&order=created_at.desc"),
+        supabase(env, "helix_materials?select=id,title,description,kind,storage_path,published,created_at&order=created_at.desc"),
+        adminAuth(env, "admin/users?page=1&per_page=1000", "GET"),
+      ]);
+      const authById = new Map((authUsers.users || []).map(user => [user.id, user]));
+      const enrichedMembers = members.map(member => ({ ...member, banned_until: authById.get(member.id)?.banned_until || null }));
+      let emailRequests = [], emailRequestsAvailable = true;
+      try { emailRequests = await supabase(env, "helix_email_change_requests?select=id,member_id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&status=in.(pending,approved_awaiting_verification)&order=created_at.asc&limit=200"); }
+      catch { emailRequestsAvailable = false; }
+      const membersById = new Map(enrichedMembers.map(member => [member.id, member]));
+      return response({ admin: session.member, members: enrichedMembers, licenses, bindings, events, announcements, materials, emailRequests: emailRequests.map(item => ({ ...item, member: membersById.get(item.member_id) || null })), emailRequestsAvailable });
+    }
+
+    const session = await requireUser(request, env, pathname.startsWith("admin/"));
+    if (session.error) return session.error;
+
+    if (pathname === "admin/performance/accounts" && method === "GET") {
+      const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+      const canaryOn = env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
+      if (!performanceGlobal && !canaryOn) return response({ status: "WAITING_FOR_EA_R7", accounts: [], message: "Performance belum diaktifkan." });
+      await rateLimit(request, env, "admin_performance_accounts", session.user.id, 20, 60);
+      const validId = value => !value || /^[0-9a-f-]{36}$/i.test(value);
+      const memberFilter = url.searchParams.get("member_id"), licenseFilter = url.searchParams.get("license_id"), bindingFilter = url.searchParams.get("binding_id");
+      if (![memberFilter, licenseFilter, bindingFilter].every(validId)) return response({ error: "INVALID_FILTER" }, 400);
+      const fromValue = brokerBound(url.searchParams.get("from") || "2026-09-01T00:00:00");
+      const toValue = brokerBound(url.searchParams.get("to"));
+      if (fromValue === undefined || toValue === undefined) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const from = boundedPerformanceFrom(fromValue);
+      if (from === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      let canaryMemberIds = null, canaryLicenseIds = null;
+      if (!performanceGlobal) {
+        canaryMemberIds = await telemetryCanaryMembers(env);
+        if (!canaryMemberIds.size) return response({ status: "CANARY", accounts: [], message: "Belum ada member canary aktif." });
+        const canaryLicenses = await supabase(env, `helix_licenses?member_id=in.(${[...canaryMemberIds].join(",")})&deleted_at=is.null&select=id`);
+        canaryLicenseIds = [...new Set(canaryLicenses.map(row => row.id))];
+        if (!canaryLicenseIds.length) return response({ status: "CANARY", accounts: [], message: "Member canary belum memiliki license aktif." });
+      }
+      const clauses = ["released_at=is.null", "select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at,first_seen_at", "order=first_seen_at.desc", "limit=1000"];
+      if (bindingFilter && canaryLicenseIds) {
+        const requestedBinding = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingFilter)}&select=license_id&limit=1`);
+        if (!requestedBinding.length || !canaryLicenseIds.includes(requestedBinding[0].license_id)) return response({ error: "INVALID_FILTER" }, 404);
+      }
+      if (bindingFilter) clauses.push(`id=eq.${encodeURIComponent(bindingFilter)}`);
+      else if (canaryLicenseIds) clauses.push(`license_id=in.(${canaryLicenseIds.join(",")})`);
+      const bindings = await supabase(env, `helix_license_bindings?${clauses.join("&")}`);
+      if (!bindings.length) return response({ status: performanceGlobal ? "READY" : "CANARY", accounts: [], message: "Tidak ada akun MT5 untuk filter ini." });
+      const licenseIds = [...new Set(bindings.map(row => row.license_id))];
+      const licenses = await supabase(env, `helix_licenses?id=in.(${licenseIds.join(",")})&deleted_at=is.null&select=id,member_id,product_slug,status,expires_at,license_key_hint`);
+      const liveLicenses = new Map(licenses.map(row => [row.id, row]));
+      const allowedBindings = bindings.filter(row => liveLicenses.has(row.license_id));
+      if (licenseFilter && !allowedBindings.some(row => row.license_id === licenseFilter)) return response({ error: "INVALID_FILTER" }, 404);
+      let selected = allowedBindings.filter(row => !licenseFilter || row.license_id === licenseFilter);
+      const ownerIds = [...new Set(selected.map(row => liveLicenses.get(row.license_id).member_id))];
+      if (memberFilter && !ownerIds.includes(memberFilter)) return response({ error: "INVALID_FILTER" }, 404);
+      if (memberFilter) selected = selected.filter(row => liveLicenses.get(row.license_id).member_id === memberFilter);
+      if (!selected.length) return response({ status: performanceGlobal ? "READY" : "CANARY", accounts: [] });
+      const selectedBindingIds = selected.map(row => row.id);
+      const selectedOwnerIds = [...new Set(selected.map(row => liveLicenses.get(row.license_id).member_id))];
+      const [members, sessions, { rates, display: fxDisplay }] = await Promise.all([
+        supabase(env, `helix_members?id=in.(${selectedOwnerIds.join(",")})&select=id,email,display_name`),
+        supabase(env, `helix_license_sessions?binding_id=in.(${selectedBindingIds.join(",")})&select=binding_id,last_telemetry_sync_at&order=last_telemetry_sync_at.desc&limit=5000`),
+        currencyUsdRates(env),
+      ]);
+      const memberById = new Map(members.map(row => [row.id, row]));
+      const latestSync = new Map();
+      for (const row of sessions) if (row.last_telemetry_sync_at && (!latestSync.has(row.binding_id) || row.last_telemetry_sync_at > latestSync.get(row.binding_id))) latestSync.set(row.binding_id, row.last_telemetry_sync_at);
+      const dataByBinding = new Map(), summaryFunction = performanceGlobal ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2", work = [...selected];
+      const summaryWorkers = Array.from({ length: Math.min(4, work.length) }, async () => {
+        while (work.length) {
+          const binding = work.shift(), license = liveLicenses.get(binding.license_id);
+          const raw = await rpc(env, summaryFunction, { p_member_id: license.member_id, p_license_id: license.id, p_binding_id: binding.id, p_from: from, p_to: toValue });
+          dataByBinding.set(binding.id, usdMetrics(raw, rates));
+        }
+      });
+      await Promise.all(summaryWorkers);
+      const accounts = selected.map(binding => {
+        const license = liveLicenses.get(binding.license_id), member = memberById.get(license.member_id);
+        const metrics = dataByBinding.get(binding.id) || { status: "NO_DATA", total_closed_trades: 0 };
+        metrics.last_sync_at = latestSync.get(binding.id) || null;
+        const now = Date.now(), expired = license.expires_at && Date.parse(license.expires_at) <= now;
+        return { member_id: license.member_id, member_name: member?.display_name || "Member", member_email: member?.email || "", license_id: license.id, license: license.license_key_hint || license.product_slug, license_status: expired ? "expired" : license.status, binding_id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, status: binding.released_at ? "released" : expired ? "expired" : license.status, last_sync_at: latestSync.get(binding.id) || binding.last_sync_at || null, metrics };
+      });
+      return response({ status: performanceGlobal ? "READY" : "CANARY", reconciliation: "server_validated_mt5_history_not_confirmed", accounts, currency_rates: fxDisplay, applied_filters: { member_id: memberFilter, license_id: licenseFilter, binding_id: bindingFilter, from, to: toValue }, message: performanceGlobal ? null : "Data hanya mencakup akun telemetry canary yang masih aktif; Performance Global tetap OFF." });
+    }
+
+    if (pathname === "admin/performance/details" && method === "GET") {
+      const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+      if (!performanceGlobal && env.PORTAL_PERFORMANCE_CANARY_ENABLED !== "true") return response({ error: "PERFORMANCE_NOT_ENABLED" }, 403);
+      await rateLimit(request, env, "admin_performance_details", session.user.id, 30, 60);
+      const bindingId = url.searchParams.get("binding_id"), page = Number(url.searchParams.get("page") || 1), pageSize = 50;
+      if (!/^[0-9a-f-]{36}$/i.test(bindingId || "") || !Number.isInteger(page) || page < 1 || page > 10000) return response({ error: "INVALID_FILTER" }, 400);
+      const fromValue = brokerBound(url.searchParams.get("from") || "2026-09-01T00:00:00"), toValue = brokerBound(url.searchParams.get("to"));
+      if (fromValue === undefined || toValue === undefined) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const from = boundedPerformanceFrom(fromValue);
+      if (from === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const bindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&select=id,license_id,broker_server,account_login,mode,magic_base,released_at&limit=1`);
+      const binding = bindings[0]; if (!binding || binding.released_at) return response({ error: "BINDING_NOT_FOUND" }, 404);
+      const licenses = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(binding.license_id)}&deleted_at=is.null&select=id,member_id,status,expires_at&limit=1`);
+      if (!licenses.length) return response({ error: "LICENSE_NOT_FOUND" }, 404);
+      if (!performanceGlobal && !(await telemetryCanaryMembers(env)).has(licenses[0].member_id)) return response({ error: "PERFORMANCE_CANARY_ONLY" }, 403);
+      const params = [`binding_id=eq.${encodeURIComponent(bindingId)}`, `closed_at_broker=gte.${encodeURIComponent(from)}`];
+      if (toValue) params.push(`closed_at_broker=lt.${encodeURIComponent(toValue)}`);
+      params.push("select=position_id,currency,symbol,net_pnl,outcome,opened_at_broker,closed_at_broker", "order=closed_at_broker.desc", `limit=${pageSize + 1}`, `offset=${(page - 1) * pageSize}`);
+      const pageTrades = await supabase(env, `helix_completed_trades?${params.join("&")}`), hasMore = pageTrades.length > pageSize, trades = pageTrades.slice(0, pageSize);
+      const positionIds = [...new Set(trades.map(row => row.position_id))];
+      let deals = [];
+      if (positionIds.length) deals = await supabase(env, `helix_telemetry_deals?binding_id=eq.${encodeURIComponent(bindingId)}&position_id=in.(${positionIds.map(encodeURIComponent).join(",")})&select=deal_ticket,position_id,occurred_at_broker,direction,entry_kind,volume,profit,commission,swap,fee,currency,symbol,magic&order=occurred_at_broker.asc&limit=5000`);
+      const dealsByPosition = new Map();
+      for (const deal of deals) { const list = dealsByPosition.get(deal.position_id) || []; list.push(deal); dealsByPosition.set(deal.position_id, list); }
+      return response({ status: performanceGlobal ? "READY" : "CANARY", reconciliation: "server_validated_mt5_history_not_confirmed", binding: { id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, license_status: licenses[0].status }, trades: trades.map(trade => ({ ...trade, deals: dealsByPosition.get(trade.position_id) || [] })), page, page_size: pageSize, has_more: hasMore, from, to: toValue });
+    }
+
+    if (pathname === "admin/performance" && method === "GET") {
+      const requestedPage = Number(url.searchParams.get("page") || 1);
+      if (!Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > 1000) return response({ error: "INVALID_PAGE" }, 400);
+      const page = requestedPage;
+      const pageSize = 20;
+      let weekStartValue = url.searchParams.get("week_start") || new Date(Date.now() - ((new Date().getUTCDay() + 6) % 7) * 86400000).toISOString().slice(0, 10);
+      const monthValue = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+      const monthPattern = /^\d{4}-(0[1-9]|1[0-2])$/;
+      const parsedWeekDate = new Date(`${weekStartValue}T00:00:00Z`);
+      if (!datePattern.test(weekStartValue) || !monthPattern.test(monthValue) || Number.isNaN(parsedWeekDate.getTime()) || parsedWeekDate.toISOString().slice(0, 10) !== weekStartValue) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const selectedWeekDate = new Date(`${weekStartValue}T00:00:00Z`);
+      selectedWeekDate.setUTCDate(selectedWeekDate.getUTCDate() - ((selectedWeekDate.getUTCDay() + 6) % 7));
+      weekStartValue = selectedWeekDate.toISOString().slice(0, 10);
+      const shiftDate = (value, days) => { const d = new Date(`${value}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+      const weekEnd = shiftDate(weekStartValue, 7), priorWeekStart = shiftDate(weekStartValue, -7);
+      const monthStart = `${monthValue}-01`;
+      const [monthYear, monthNumber] = monthValue.split("-").map(Number);
+      const monthEnd = new Date(Date.UTC(monthYear, monthNumber, 1)).toISOString().slice(0, 10);
+      const priorMonthStart = new Date(Date.UTC(monthYear, monthNumber - 2, 1)).toISOString().slice(0, 10);
+      const monthFrom = date => `${date}T00:00:00`;
+      const performanceGlobalAdmin = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+      const performanceEnabled = performanceGlobalAdmin || env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
+      if (performanceEnabled) await rateLimit(request, env, "admin_performance", session.user.id, 10, 60);
+      let members = await supabase(env, `helix_members?role=eq.member&select=id,email,display_name,created_at&order=created_at.desc&limit=1000`);
+      if (!performanceGlobalAdmin && performanceEnabled) {
+        const allowedMembers = await telemetryCanaryMembers(env);
+        members = members.filter(member => allowedMembers.has(member.id));
+      }
+      const filterMember = url.searchParams.get("member_id"), filterLicense = url.searchParams.get("license_id"), filterBinding = url.searchParams.get("binding_id");
+      if ([filterMember, filterLicense, filterBinding].some(value => value && !/^[0-9a-f-]{36}$/i.test(value))) return response({ error: "INVALID_FILTER" }, 400);
+      if (filterLicense || filterBinding) {
+        let licenseIds = filterLicense ? [filterLicense] : null;
+        if (filterBinding) {
+          const selectedBindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(filterBinding)}&select=license_id`);
+          if (!selectedBindings.length) return response({ error: "INVALID_FILTER" }, 404);
+          if (licenseIds && !licenseIds.includes(selectedBindings[0].license_id)) return response({ error: "INVALID_FILTER" }, 400);
+          licenseIds = [selectedBindings[0].license_id];
+        }
+        const selectedLicenses = await supabase(env, `helix_licenses?${filterMember ? `member_id=eq.${encodeURIComponent(filterMember)}&` : ""}id=in.(${licenseIds.join(",")})&select=id,member_id`);
+        const memberSet = new Set(selectedLicenses.map(item => item.member_id));
+        members = members.filter(member => memberSet.has(member.id));
+      }
+      if (filterMember) members = members.filter(member => member.id === filterMember);
+      const total = members.length;
+      const pageMembers = members.slice((page - 1) * pageSize, page * pageSize);
+      const base = { members: pageMembers, page, page_size: pageSize, total_members: total, total_pages: Math.max(1, Math.ceil(total / pageSize)), week_start: weekStartValue, month: monthValue };
+      if (!performanceEnabled) return response({ ...base, status: "WAITING_FOR_EA_R7", summaries: [], message: "Performa menunggu verifikasi EA dan aktivasi telemetry. Daftar member tetap live; tidak ada angka simulasi." });
+
+      const { rates: fxRates, display: fxDisplay } = await currencyUsdRates(env);
+      const summaryFunction = performanceGlobalAdmin ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2";
+      const windowSummary = async (memberId, from, to) => usdMetrics(await rpc(env, summaryFunction, { p_member_id: memberId, p_license_id: filterLicense, p_binding_id: filterBinding, p_from: boundedPerformanceFrom(from), p_to: to }), fxRates);
+      const work = [...pageMembers];
+      const summaries = [];
+      const workers = Array.from({ length: Math.min(4, work.length) }, async () => {
+        while (work.length) {
+          const member = work.shift();
+          const [all, week, previousWeek, month, previousMonth] = await Promise.all([
+            windowSummary(member.id, null, null),
+            windowSummary(member.id, monthFrom(weekStartValue), monthFrom(weekEnd)),
+            windowSummary(member.id, monthFrom(priorWeekStart), monthFrom(weekStartValue)),
+            windowSummary(member.id, monthFrom(monthStart), monthFrom(monthEnd)),
+            windowSummary(member.id, monthFrom(priorMonthStart), monthFrom(monthStart)),
+          ]);
+          const growth = (current, previous) => {
+            if (current.status === "MIXED_CURRENCY" || previous.status === "MIXED_CURRENCY") return { status: "MIXED_CURRENCY", net_pnl: null, growth_pct: null, currency: null };
+            const currentPnl = current.status === "READY" ? Number(current.net_pnl_usd) : 0;
+            const previousPnl = previous.status === "READY" ? Number(previous.net_pnl_usd) : 0;
+            if (!current.total_closed_trades && !previous.total_closed_trades) return { status: "NO_DATA", net_pnl_usd: null, growth_pct: null };
+            const growthPct = previousPnl === 0 ? (currentPnl === 0 ? 0 : null) : Math.round(((currentPnl - previousPnl) / Math.abs(previousPnl)) * 10000) / 100;
+            return { status: "READY", net_pnl_usd: currentPnl, growth_pct: growthPct };
+          };
+          summaries.push({ member_id: member.id, lifetime: all, weekly: growth(week, previousWeek), monthly: growth(month, previousMonth) });
+        }
+      });
+      try { await Promise.all(workers); }
+      catch (error) {
+        if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "MEMBER_PERFORMANCE_FUNCTION_MISSING", message: "Fungsi helix_member_performance_summary belum ada. Verifikasi penerapan migration telemetry dasar sebelum melanjutkan." }, 503);
+        throw error;
+      }
+      return response({ ...base, status: performanceGlobalAdmin ? "READY" : "CANARY", summaries, currency_rates: fxDisplay, applied_filters: { member_id: filterMember, license_id: filterLicense, binding_id: filterBinding }, message: performanceGlobalAdmin ? null : "Data ini hanya akun demo yang terdaftar untuk canary; Performance Global tetap OFF." });
+    }
+
+    if (pathname === "admin/members" && method === "POST") {
+      const email = String(json.email || "").trim().toLowerCase();
+      const displayName = String(json.display_name || "").trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) return response({ error: "Alamat email tidak valid." }, 400);
+      const invited = await adminAuth(env, `invite?redirect_to=${encodeURIComponent(`${portalBaseUrl(env)}/vip/login?flow=invite`)}`, "POST", {
+        email, data: { full_name: displayName },
+      });
+      return response({ ok: true, member: invited.user || invited, message: "Undangan aktivasi dikirim ke email member." }, 201);
+    }
+
+    if (/^admin\/members\/[0-9a-f-]{36}\/role$/i.test(pathname) && method === "PATCH") {
+      const targetId = pathname.split("/")[2];
+      const role = String(json.role || "");
+      const reason = String(json.reason || "").trim();
+      if (!/^[0-9a-f-]{36}$/i.test(targetId) || !["admin", "member"].includes(role)) return response({ error: "INVALID_ROLE_CHANGE" }, 400);
+      if (targetId === session.user.id) return response({ error: "SELF_ROLE_CHANGE_BLOCKED", message: "Role akun yang sedang digunakan tidak dapat diubah dari sesi ini." }, 400);
+      if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan perubahan wajib diisi (3-300 karakter)." }, 400);
+      try {
+        const result = await rpc(env, "helix_admin_set_member_role", { p_target_member_id: targetId, p_actor_id: session.user.id, p_role: role, p_reason: reason });
+        if (!result?.ok) return response({ error: result?.error_code || "ROLE_CHANGE_FAILED" }, result?.error_code === "MEMBER_NOT_FOUND" ? 404 : 400);
+        return response({ ok: true, role: result.role, unchanged: Boolean(result.unchanged) });
+      } catch (error) {
+        if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "ROLE_MIGRATION_REQUIRED", message: "Fungsi audit perubahan role belum tersedia. Terapkan migration 202610110002_helix_admin_member_roles.sql terlebih dahulu." }, 503);
+        throw error;
+      }
+    }
+
+    if (pathname.startsWith("admin/members/") && method === "DELETE") {
+      const id = pathname.split("/").at(-1);
+      if (id === session.user.id) return response({ error: "Admin tidak dapat menghapus akunnya sendiri dari portal." }, 400);
+      const target = await supabase(env, `helix_members?id=eq.${encodeURIComponent(id)}&select=role`);
+      if (!target.length) return response({ error: "Member tidak ditemukan." }, 404);
+      if (target[0].role === "admin") return response({ error: "Akun admin hanya dapat dikelola melalui prosedur administrator terpisah." }, 400);
+      await adminAuth(env, `admin/users/${encodeURIComponent(id)}`, "DELETE");
+      return response({ ok: true });
+    }
+
+    if (pathname.startsWith("admin/members/") && method === "POST") {
+      const id = pathname.split("/").at(-1);
+      if (json.action === "reset") {
+        const rows = await supabase(env, `helix_members?id=eq.${encodeURIComponent(id)}&select=email`);
+        if (!rows.length) return response({ error: "Member tidak ditemukan." }, 404);
+        await adminAuth(env, `recover?redirect_to=${encodeURIComponent(`${portalBaseUrl(env)}/vip/login?flow=recovery`)}`, "POST", { email: rows[0].email, gotrue_meta_security: {} });
+        return response({ ok: true, message: "Link reset password dikirim lewat HELIX TEAM." });
+      }
+      if (json.action === "suspend" || json.action === "unsuspend") {
+        const target = await supabase(env, `helix_members?id=eq.${encodeURIComponent(id)}&select=id,role`);
+        if (!target.length) return response({ error: "Member tidak ditemukan." }, 404);
+        if (target[0].role === "admin") return response({ error: "Akun admin tidak dapat disuspend dari menu Member." }, 400);
+        const reason = String(json.reason || "").trim();
+        if (reason.length < 3 || reason.length > 300) return response({ error: "Alasan suspend/pemulihan wajib diisi (3-300 karakter)." }, 400);
+        const suspended = json.action === "suspend";
+        let licenseResult;
+        try {
+          licenseResult = await rpc(env, "helix_admin_set_member_suspended", { p_member_id: id, p_actor_id: session.user.id, p_suspended: suspended, p_reason: reason });
+        } catch (error) {
+          if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "MEMBER_ACCESS_MIGRATION_REQUIRED", message: "Blokir license dan sesi EA belum tersedia. Terapkan migration 202610110003_helix_member_license_suspend.sql terlebih dahulu." }, 503);
+          throw error;
+        }
+        if (!licenseResult?.ok) return response({ error: licenseResult?.error_code || "MEMBER_ACCESS_UPDATE_FAILED" }, 400);
+        try {
+          await adminAuth(env, `admin/users/${encodeURIComponent(id)}`, "PUT", { ban_duration: suspended ? "876000h" : "none" });
+        } catch (error) {
+          return response({ error: "LICENSE_ACCESS_UPDATED_AUTH_UPDATE_FAILED", message: suspended ? "License dan sesi EA sudah diblokir, tetapi pemblokiran login portal gagal. Coba ulangi tindakan suspend." : "License sudah dipulihkan dan sesi lama dicabut, tetapi pemulihan login portal gagal. Periksa status akun Auth." }, 503);
+        }
+        return response({ ok: true, licenses_changed: licenseResult.licenses_changed, sessions_revoked: licenseResult.sessions_revoked });
+      }
+    }
+
+    if (pathname === "admin/licenses" && method === "POST") {
+      const email = String(json.email || "").trim().toLowerCase();
+      const idempotencyKey = String(json.idempotency_key || "");
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) return response({ error: "INVALID_IDEMPOTENCY_KEY" }, 400);
+      const memberRows = await supabase(env, `helix_members?email=eq.${encodeURIComponent(email)}&select=id,email`);
+      if (!memberRows.length) return response({ error: "Buat/invite member lebih dulu sebelum membuat license." }, 400);
+      const expiryDays = json.expiry_days === undefined ? 730 : Number(json.expiry_days);
+      const maxAccounts = json.max_accounts === undefined ? 5 : Number(json.max_accounts);
+      if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 3650 || !Number.isInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 5) return response({ error: "Masa aktif harus 1-3650 hari dan slot harus 1-5." }, 400);
+      if (String(json.product_slug || "quadriga") !== "quadriga") return response({ error: "Produk license belum tersedia." }, 400);
+      const internalLegacyValue = randomKey();
+      const hash = await digest(internalLegacyValue);
+      const created = await rpc(env, "helix_admin_create_license", { p_member_id: memberRows[0].id, p_actor_id: session.user.id, p_product_slug: String(json.product_slug || "quadriga"), p_legacy_hash: hash, p_duration_days: expiryDays, p_max_accounts: maxAccounts, p_idempotency_key: idempotencyKey, p_memo: String(json.memo || "").slice(0,300) });
+      if (!created?.ok) return response({ error: created?.error_code || "LICENSE_CREATE_FAILED" }, 400);
+      return response({ ok: true, license: created.license, activation: created.activation, duration_days: expiryDays }, created.idempotent ? 200 : 201);
+    }
+
+    if (pathname.startsWith("admin/licenses/") && method === "PATCH") {
+      const id = pathname.split("/").at(-1);
+      if (json.action === "delete") {
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return response({ error: "LICENSE_NOT_FOUND" }, 404);
+        const reason = String(json.reason || "").trim();
+        if (reason.length < 3 || reason.length > 300) return response({ error: "REASON_REQUIRED", message: "Alasan penghapusan wajib diisi (3-300 karakter)." }, 400);
+        try {
+          const deleted = await rpc(env, "helix_admin_delete_license", { p_license_id: id, p_actor_id: session.user.id, p_reason: reason });
+          if (!deleted?.ok) return response({ error: deleted?.error_code || "LICENSE_DELETE_FAILED" }, deleted?.error_code === "LICENSE_NOT_FOUND" ? 404 : 400);
+          return response({ ok: true, ...deleted });
+        } catch (error) {
+          if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "LICENSE_DELETE_MIGRATION_REQUIRED", message: "Fitur penghapusan license belum siap di database production." }, 503);
+          throw error;
+        }
+      }
+      if (json.action === "rotate-key") {
+        return response({ error: "LEGACY_KEY_DISABLED", message: "Customer authentication menggunakan pairing OTP. License key manual tidak diterbitkan." }, 410);
+      }
+      if (json.action === "release-slot") {
+        if (String(json.reason || "").trim().length < 3) return response({ error: "Alasan pelepasan slot wajib diisi (minimal 3 karakter)." }, 400);
+        const rows = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(json.binding_id)}&license_id=eq.${encodeURIComponent(id)}&select=id,license_id,helix_licenses!inner(member_id)`);
+        const binding = rows?.[0];
+        if (!binding) return response({ error: "BINDING_NOT_FOUND" }, 404);
+        const result = await rpc(env, "helix_release_binding", { p_member_id: binding.helix_licenses.member_id, p_binding_id: binding.id, p_actor_id: session.user.id, p_reason: String(json.reason).trim().slice(0,300) });
+        return result?.ok ? response({ ok: true, result }) : response({ error: result?.error_code || "RELEASE_REJECTED" }, 400);
+      }
+      if (json.action !== "rotate-key") {
+        const licenseRows = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(id)}&select=id,deleted_at`);
+        if (!licenseRows?.[0]) return response({ error: "LICENSE_NOT_FOUND" }, 404);
+        if (licenseRows[0].deleted_at) return response({ error: "LICENSE_ALREADY_DELETED", message: "License yang sudah dihapus tidak dapat diaktifkan kembali." }, 409);
+      }
+      if (json.action === "renew") {
+        const days = Number(json.duration_days || 730);
+        if (!Number.isInteger(days) || days < 1 || days > 3650) return response({ error: "INVALID_DURATION" }, 400);
+        const reason = String(json.reason || "").trim();
+        if (reason.length < 3) return response({ error: "REASON_REQUIRED" }, 400);
+        const renewed = await rpc(env, "helix_admin_update_license", { p_license_id: id, p_actor_id: session.user.id, p_status: null, p_max_accounts: null, p_expires_at: null, p_duration_days: days, p_reason: reason.slice(0,300) });
+        return renewed?.ok ? response({ ok: true, license: renewed.license }) : response({ error: renewed?.error_code || "LICENSE_UPDATE_FAILED" }, 400);
+      }
+      let status = null;
+      if (json.status !== undefined) {
+        if (!["active", "suspended", "revoked", "expired"].includes(json.status)) return response({ error: "INVALID_STATUS" }, 400);
+        status = json.status;
+      }
+      let slots = null;
+      if (json.max_accounts !== undefined) {
+        slots = Number(json.max_accounts);
+        if (!Number.isInteger(slots) || slots < 1 || slots > 5) return response({ error: "Batas slot harus bilangan bulat antara 1 sampai 5." }, 400);
+      }
+      let expiry = null;
+      if (json.expires_at) {
+        const parsed = new Date(json.expires_at);
+        if (Number.isNaN(parsed.getTime())) return response({ error: "Tanggal expiry tidak valid." }, 400);
+        expiry = parsed.toISOString();
+      }
+      const duration = json.duration_days === undefined ? null : Number(json.duration_days);
+      if (duration !== null && (!Number.isInteger(duration) || duration < 1 || duration > 3650)) return response({ error: "INVALID_DURATION" }, 400);
+      const reason = String(json.reason || "").trim();
+      if (reason.length < 3) return response({ error: "REASON_REQUIRED" }, 400);
+      const updated = await rpc(env, "helix_admin_update_license", { p_license_id: id, p_actor_id: session.user.id, p_status: status, p_max_accounts: slots, p_expires_at: expiry, p_duration_days: duration, p_reason: reason.slice(0,300) });
+      if (!updated?.ok) return response({ error: updated?.error_code || "LICENSE_UPDATE_FAILED", ...(updated?.error_code === "ACTIVE_SLOTS_EXCEED_LIMIT" ? { active_slots: updated.active_slots } : {}) }, updated?.error_code === "LICENSE_NOT_FOUND" ? 404 : updated?.error_code === "ACTIVE_SLOTS_EXCEED_LIMIT" ? 409 : 400);
+      return response({ ok: true, license: updated.license });
+    }
+
+    if (pathname === "admin/announcements" && method === "POST") {
+      const row = { title: String(json.title || "").trim(), body: String(json.body || "").trim(), kind: json.kind || "update", published: Boolean(json.published), published_at: json.published ? new Date().toISOString() : null, created_by: session.user.id };
+      if (!row.title || !row.body) return response({ error: "Judul dan isi pengumuman wajib diisi." }, 400);
+      const created = await supabase(env, "helix_announcements?select=*", { method: "POST", body: row });
+      return response({ ok: true, item: created[0] }, 201);
+    }
+
+    if (pathname.startsWith("admin/announcements/") && method === "DELETE") {
+      const id = pathname.split("/").at(-1);
+      await supabase(env, `helix_announcements?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+      return response({ ok: true });
+    }
+
+    if (pathname.startsWith("admin/announcements/") && method === "PATCH") {
+      const id = pathname.split("/").at(-1);
+      const published = Boolean(json.published);
+      const updated = await supabase(env, `helix_announcements?id=eq.${encodeURIComponent(id)}&select=id,published,published_at`, { method: "PATCH", body: { published, published_at: published ? new Date().toISOString() : null } });
+      return response({ ok: true, item: updated?.[0] });
+    }
+
+    if (pathname === "admin/materials" && method === "POST") {
+      const row = { title: String(json.title || "").trim(), description: String(json.description || "").trim(), kind: json.kind || "guide", storage_path: json.storage_path || null, published: Boolean(json.published), created_by: session.user.id };
+      if (!row.title) return response({ error: "Nama material wajib diisi." }, 400);
+      const file = form?.get("file");
+      if (file && typeof file.arrayBuffer === "function" && file.size > 0) {
+        if (file.size > 50 * 1024 * 1024) return response({ error: "Ukuran file maksimum 50 MB." }, 400);
+        const extension = file.name.split(".").pop()?.toLowerCase() || "";
+        if (!/^(pdf|mp4|zip|ex5|png|jpe?g|webp|txt|mq5)$/.test(extension)) return response({ error: "Jenis file yang didukung: PDF, MP4, ZIP, EX5, PNG, JPG, WEBP, TXT, MQ5." }, 400);
+        const bucket = "helix-vip-materials";
+        try { await storageRequest(env, `bucket/${bucket}`); }
+        catch { await storageRequest(env, "bucket", { method: "POST", body: JSON.stringify({ id: bucket, name: bucket, public: false, file_size_limit: 52428800, allowed_mime_types: ["application/pdf", "video/mp4", "application/zip", "application/x-zip-compressed", "application/octet-stream", "image/png", "image/jpeg", "image/webp", "text/plain"] }) }); }
+        const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90) || `material.${extension}`;
+        const objectPath = `${crypto.randomUUID()}/${filename}`;
+        await storageRequest(env, `object/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: file, contentType: file.type || "application/octet-stream" });
+        row.storage_path = `${bucket}:${objectPath}`;
+      }
+      if (row.storage_path) {
+        if (!row.storage_path.startsWith("helix-vip-materials:")) {
+          let link;
+          try { link = new URL(row.storage_path); } catch { return response({ error: "URL material tidak valid." }, 400); }
+          if (link.protocol !== "https:") return response({ error: "URL material harus menggunakan HTTPS." }, 400);
+        }
+      }
+      const created = await supabase(env, "helix_materials?select=*", { method: "POST", body: row });
+      return response({ ok: true, item: created[0] }, 201);
+    }
+
+    if (pathname.startsWith("admin/materials/") && method === "DELETE") {
+      const id = pathname.split("/").at(-1);
+      const material = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=storage_path`);
+      if (material[0]?.storage_path?.startsWith("helix-vip-materials:")) {
+        const objectPath = material[0].storage_path.split(":").slice(1).join(":");
+        await storageRequest(env, "object/helix-vip-materials", { method: "DELETE", body: JSON.stringify({ prefixes: [objectPath] }) });
+      }
+      await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+      return response({ ok: true });
+    }
+
+    if (pathname.startsWith("member/materials/") && method === "GET") {
+      const memberSession = await requireUser(request, env);
+      if (memberSession.error) return memberSession.error;
+      const id = pathname.split("/").at(-1);
+      const rows = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&published=eq.true&select=storage_path,title`);
+      if (!rows.length || !rows[0].storage_path) return response({ error: "File material tidak ditemukan." }, 404);
+      const storage = rows[0].storage_path;
+      if (!storage.startsWith("helix-vip-materials:")) {
+        let external;
+        try { external = new URL(storage); } catch { return response({ error: "URL file tidak valid." }, 400); }
+        if (external.protocol !== "https:") return response({ error: "URL file tidak aman." }, 400);
+        return response({ url: external.href });
+      }
+      const [, objectPath] = storage.split(":", 2);
+      const signed = await storageRequest(env, `object/sign/helix-vip-materials/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: JSON.stringify({ expiresIn: 600 }) });
+      const signedPath = signed.signedURL || signed.signedUrl;
+      const fileUrl = new URL(signedPath.startsWith("http") ? signedPath : `${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/storage/v1${signedPath}`);
+      fileUrl.searchParams.set("download", "");
+      return response({ url: fileUrl.toString() });
+    }
+
+    if (pathname.startsWith("admin/materials/") && method === "PATCH") {
+      const id = pathname.split("/").at(-1);
+      const updated = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=id,published`, { method: "PATCH", body: { published: Boolean(json.published) } });
+      return response({ ok: true, item: updated?.[0] });
+    }
+
+    return response({ error: "Endpoint tidak ditemukan." }, 404);
+  } catch (error) {
+    if (error?.status === 429) return response({ error: "RATE_LIMITED", retry_after_seconds: error.retryAfter || 60 }, 429);
+    return response({ error: "Permintaan belum berhasil diproses. Periksa konfigurasi HELIX TEAM/Pages Functions lalu coba lagi." }, error?.status === 503 ? 503 : 500);
+  }
+}
