@@ -1,5 +1,7 @@
 # HELIX EA License and Account Release Policy
 
+> Dokumen induk untuk skema license, OTP, entitlement crypto, sync, binding/kuota, release, telemetry, semua EA/code name, database, rollout, dan security checklist kini berada di [HELIX Universal License Policy](HELIX_UNIVERSAL_LICENSE_POLICY.md). Halaman ini mempertahankan ringkasan state/release v1.8k untuk referensi cepat.
+
 This policy is the shared contract for HELIX QUADRIGA and every future HELIX EA, regardless of version, code name, or strategy family. Each EA must use the same server-side license lifecycle. Product-specific trading logic must not implement its own slot-release rules.
 
 ## Binding and slot rules
