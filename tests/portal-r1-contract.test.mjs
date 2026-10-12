@@ -199,10 +199,10 @@ test('portal admin and member source use only branded dialogs for actions and co
   new vm.Script(ui,{filename:'helix-ui.js'});
 });
 
-test('admin has a dedicated paginated performance menu, existing RPC, weekly/monthly filters, and favicons', async () => {
-  const admin=await readFile('public/vip/admin/index.html','utf8'),api=await readFile('functions/vip/api/[[path]].js','utf8');
-  assert.match(admin,/\['Performance','chart'\]/);assert.match(admin,/Total profit/);assert.match(admin,/Win rate/);assert.match(admin,/Profit factor/);assert.match(admin,/performance-week/);assert.match(admin,/performance-month/);assert.match(api,/admin\/performance/);assert.match(api,/helix_member_performance_summary/);assert.doesNotMatch(api,/helix_admin_member_performance_summary/);
-  for(const path of ['public/vip/index.html','public/vip/admin/index.html','public/vip/admin.html','public/vip/login.html','public/vip/login/index.html'])assert.match(await readFile(path,'utf8'),/rel="icon" type="image\/svg\+xml" href="\/vip\/favicon\.svg"/);
+test('admin performance is one account table with filters and 15-member pages', async () => {
+  const admin=await readFile('public/vip/admin/index.html','utf8'),api=await readFile('functions/vip/api/[[path]].js','utf8'),css=await readFile('public/vip/helix-ui/css/portal-r1.css','utf8');
+  assert.match(admin,/\['Performance','chart'\]/);assert.match(admin,/Performance per akun MT5/);assert.match(admin,/Net Profit \(USD\)/);assert.match(admin,/Closed Trades/);assert.match(admin,/Win \/ Loss/);assert.match(admin,/Magic Base/);assert.match(admin,/memberIds\.slice\(start,start\+15\)/);assert.match(admin,/accountPerformanceTable\(rows\.filter/);assert.match(admin,/account-perf-search/);assert.doesNotMatch(admin,/Trading Performance Member|data-account-performance-detail|Lihat detail|performance-week|performance-month|loadAdminPerformance/);assert.match(api,/admin\/performance/);assert.match(api,/helix_member_performance_summary/);assert.match(css,/admin-performance-table/);
+  for(const path of ['public/vip/index.html','public/vip/admin/index.html','public/vip/admin.html','public/vip/login.html','public/vip/login/index.html'])assert.match(await readFile(path,'utf8'),/rel=\"icon\" type=\"image\/svg\+xml\" href=\"\/vip\/favicon\.svg\"/);
   await access('public/vip/favicon.svg');
 });
 
@@ -274,7 +274,7 @@ test('all portal inline scripts parse and the existing 7 member menus plus 6 adm
   const member=await readFile('public/vip/index.html','utf8'),memberR1=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8'),admin=await readFile('public/vip/admin/index.html','utf8');
   assert.equal((member.match(/\['(?:dashboard|licenses|accounts|activity|announcements|materials|profile)'/g)||[]).length,7);
   assert.equal((admin.match(/\['(?:Dashboard|Member|Performance|License & Akun|Announcement|Material)'/g)||[]).length,6);
-  assert.match(admin,/Performance per akun MT5/);assert.match(admin,/data-account-performance-detail/);assert.match(admin,/License & Akun/);assert.match(admin,/function performancePage\(\)[\s\S]*?accountPerformancePanel\(\)/);
+  assert.match(admin,/Performance per akun MT5/);assert.doesNotMatch(admin,/data-account-performance-detail|Lihat detail|Trading Performance Member/);assert.match(admin,/License & Akun/);assert.match(admin,/function performancePage\(\)[\s\S]*?accountPerformancePanel\(\)/);
   assert.match(memberR1,/Performance per akun MT5/);assert.match(memberR1,/member\/performance\/accounts/);
 });
 
