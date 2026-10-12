@@ -329,7 +329,7 @@ test('member cannot delete a license and deleted licenses are hidden from their 
 test('member and admin portals share a 30-minute cross-tab idle sign-out', async () => {
   const idle=await readFile('public/vip/helix-ui/js/idle-timeout.js','utf8');
   const loader=await readFile('public/vip/helix-ui/js/portal-r1-loader.js','utf8');
-  assert.match(idle,/30 \* 60 \* 1000/);assert.match(idle,/pointerdown.*keydown.*touchstart.*wheel.*mousemove/);assert.match(idle,/scope: 'local'/);assert.match(idle,/helix:portal:idle-logout/);
+  assert.match(idle,/30 \* 60 \* 1000/);assert.match(idle,/pointerdown.*keydown.*touchstart.*wheel.*mousemove/);assert.match(idle,/scope: 'local'/);assert.match(idle,/helix:portal:idle-logout/);assert.match(idle,/removeItem\(activityKey\)/);
   assert.match(loader,/idle-timeout\.js\?v=idle-30m-20261012/);
   new vm.Script(idle,{filename:'idle-timeout.js'});new vm.Script(loader,{filename:'portal-r1-loader.js'});
 });

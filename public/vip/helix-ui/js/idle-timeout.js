@@ -25,6 +25,7 @@
     if (signedOut || !userId) return;
     signedOut = true;
     localStorage.setItem(logoutKey, JSON.stringify({ userId, at: Date.now() }));
+    localStorage.removeItem(activityKey);
     try { await client.auth.signOut({ scope: 'local' }); } catch { /* Continue to the login screen. */ }
     location.replace(loginUrl);
   }
