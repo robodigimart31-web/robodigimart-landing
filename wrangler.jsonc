@@ -1,28 +1,28 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "helix-website",
-  "pages_build_output_dir": "./cloudflare-dist",
-  "compatibility_date": "2026-10-10",
-  "env": {
-    "production": {
-      "vars": {
-        "PORTAL_LICENSE_MANAGEMENT_ENABLED": "true",
-        "PORTAL_EMAIL_CHANGE_ENABLED": "false",
-        "PORTAL_OTP_ENABLED": "false",
-        "PORTAL_OTP_CANARY_ENABLED": "true",
-        "PORTAL_PERFORMANCE_ENABLED": "false",
-        "EA_R7_TELEMETRY_READY": "false"
-      }
-    },
-    "preview": {
-      "vars": {
-        "PORTAL_LICENSE_MANAGEMENT_ENABLED": "false",
-        "PORTAL_EMAIL_CHANGE_ENABLED": "false",
-        "PORTAL_OTP_ENABLED": "false",
-        "PORTAL_OTP_CANARY_ENABLED": "false",
-        "PORTAL_PERFORMANCE_ENABLED": "false",
-        "EA_R7_TELEMETRY_READY": "false"
-      }
-    }
-  }
+    "$schema":  "node_modules/wrangler/config-schema.json",
+    "name":  "helix-website",
+    "pages_build_output_dir":  "./cloudflare-dist",
+    "compatibility_date":  "2026-10-10",
+    "env":  {
+                "production":  {
+                                   "vars":  {
+                                                "PORTAL_LICENSE_MANAGEMENT_ENABLED":  "true",
+                                                "PORTAL_EMAIL_CHANGE_ENABLED":  "false",
+                                                "PORTAL_OTP_ENABLED":  "true",
+                                                "PORTAL_OTP_CANARY_ENABLED":  "true",
+                                                "PORTAL_PERFORMANCE_ENABLED":  "false",
+                                                "EA_R7_TELEMETRY_READY":  "false"
+                                            }
+                               },
+                "preview":  {
+                                "vars":  {
+                                             "PORTAL_LICENSE_MANAGEMENT_ENABLED":  "false",
+                                             "PORTAL_EMAIL_CHANGE_ENABLED":  "false",
+                                             "PORTAL_OTP_ENABLED":  "false",
+                                             "PORTAL_OTP_CANARY_ENABLED":  "false",
+                                             "PORTAL_PERFORMANCE_ENABLED":  "false",
+                                             "EA_R7_TELEMETRY_READY":  "false"
+                                         }
+                            }
+            }
 }
