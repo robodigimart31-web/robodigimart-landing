@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import vm from 'node:vm';
@@ -330,7 +330,7 @@ test('member and admin portals share a 30-minute cross-tab idle sign-out', async
   const idle=await readFile('public/vip/helix-ui/js/idle-timeout.js','utf8');
   const loader=await readFile('public/vip/helix-ui/js/portal-r1-loader.js','utf8');
   assert.match(idle,/30 \* 60 \* 1000/);assert.match(idle,/pointerdown.*keydown.*touchstart.*wheel.*mousemove/);assert.match(idle,/scope: 'local'/);assert.match(idle,/helix:portal:idle-logout/);assert.match(idle,/removeItem\(activityKey\)/);
-  assert.match(loader,/idle-timeout\.js\?v=idle-30m-20261012/);
+  assert.match(loader,/idle-timeout\.js\?v=idle-30m-20261012b/);
   new vm.Script(idle,{filename:'idle-timeout.js'});new vm.Script(loader,{filename:'portal-r1-loader.js'});
 });
 
@@ -357,3 +357,4 @@ test('VIP subdomain maps root and existing shortcut routes to the live portal sh
   await vipHostRouting({request:nonRoot,next:async value=>{forwarded=value||nonRoot;return new Response('ok');}});
   assert.equal(forwarded.url,nonRoot.url,'marketing host non-root routes are unchanged');
 });
+
