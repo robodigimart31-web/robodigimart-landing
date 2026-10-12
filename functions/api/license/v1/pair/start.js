@@ -16,7 +16,8 @@ export async function onRequestPost({ request, env }) {
     const build = String(input.ea_build || "unknown").slice(0, 48);
     const product = String(input.ea_product_id || "");
     const version = String(input.ea_version || "");
-    if (broker.length < 2 || broker.length > 120 || /[\u0000-\u001f\u007f]/.test(broker) || !/^[0-9]{3,18}$/.test(login) || !["real", "demo"].includes(mode) || protocol !== "v2" || !/^[A-Za-z0-9._-]{1,48}$/.test(build) || !/^[a-z][a-z0-9_]{1,47}$/.test(product) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(version)) return json({ error: "INVALID_REQUEST" }, 400, headers);
+    const magicBase = input.magic_base;
+    if (broker.length < 2 || broker.length > 120 || /[\u0000-\u001f\u007f]/.test(broker) || !/^[0-9]{3,18}$/.test(login) || !["real", "demo"].includes(mode) || protocol !== "v2" || !/^[A-Za-z0-9._-]{1,48}$/.test(build) || !/^[a-z][a-z0-9_]{1,47}$/.test(product) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(version) || (magicBase !== undefined && (!Number.isSafeInteger(magicBase) || magicBase < 1 || magicBase > Number.MAX_SAFE_INTEGER - 47))) return json({ error: "INVALID_REQUEST" }, 400, headers);
     const normalizedServer = broker.toLocaleLowerCase("en-US");
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 100_000_000).padStart(8, "0");
     const sessionSecret = randomToken(32);
@@ -36,6 +37,10 @@ export async function onRequestPost({ request, env }) {
       p_ea_product_id: product,
       p_ea_version: version,
     });
+    if (magicBase !== undefined) {
+      const registered = await rpc(env, "helix_session_set_magic_base", { p_session_hash: sessionHash, p_magic_base: magicBase });
+      if (!registered?.ok) return json({ error: registered?.error_code || "MAGIC_BASE_REGISTRATION_FAILED" }, 409, headers);
+    }
     return json({ pairing_code: code, pairing_request_id: created.id, session_secret: sessionSecret, expires_at: created.expires_at, poll_interval_seconds: 15, protocol_version: "v2", ea_product_id: product, ea_version: version }, 201, headers);
   } catch (error) { return fail(error, headers); }
 }

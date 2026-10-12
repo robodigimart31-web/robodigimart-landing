@@ -58,6 +58,44 @@ async function digest(value) {
   return [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, "0")).join("");
 }
 
+async function currencyUsdRates(env) {
+  const rows = await supabase(env, "helix_general_settings?setting_key=in.(usd_idr_rate,usc_per_usd,currency_usd_rates)&select=setting_key,setting_value");
+  const settings = Object.fromEntries((rows || []).map(row => [row.setting_key, row.setting_value]));
+  const idr = Number(settings.usd_idr_rate ?? 17500), usc = Number(settings.usc_per_usd ?? 100);
+  const extra = settings.currency_usd_rates && typeof settings.currency_usd_rates === "object" ? settings.currency_usd_rates : {};
+  const rates = { USD: 1, IDR: 1 / idr, USC: 1 / usc };
+  for (const [code, rate] of Object.entries(extra)) if (/^[A-Z]{3,6}$/.test(code) && Number.isFinite(Number(rate)) && Number(rate) > 0) rates[code] = Number(rate);
+  return { rates, display: { usd_idr_rate: idr, usc_per_usd: usc, currency_usd_rates: extra } };
+}
+
+function usdMetrics(raw, rates) {
+  const buckets = new Map();
+  for (const row of raw?.by_currency || []) {
+    const old = buckets.get(row.currency) || { currency: row.currency, trades: 0, wins: 0, losses: 0, break_even: 0, gross_profit: 0, gross_loss: 0, net_pnl: 0, last_sync_at: null };
+    for (const key of ["trades", "wins", "losses", "break_even"]) old[key] += Number(row[key] || 0);
+    for (const key of ["gross_profit", "gross_loss", "net_pnl"]) old[key] += Number(row[key] || 0);
+    if (row.last_sync_at && (!old.last_sync_at || row.last_sync_at > old.last_sync_at)) old.last_sync_at = row.last_sync_at;
+    buckets.set(row.currency, old);
+  }
+  const currencies = [...buckets.values()], included = currencies.filter(x => rates[x.currency] != null), excluded = currencies.filter(x => rates[x.currency] == null).map(x => x.currency);
+  if (!included.length) return { status: currencies.length ? "UNSUPPORTED_CURRENCY" : "NO_DATA", total_closed_trades: 0, unsupported_currencies: excluded, currencies, last_sync_at: raw?.last_sync_at || null };
+  const total = key => included.reduce((sum, x) => sum + x[key], 0);
+  const trades = total("trades"), wins = total("wins"), losses = total("losses"), be = total("break_even");
+  const net = included.reduce((sum, x) => sum + x.net_pnl * rates[x.currency], 0);
+  const grossProfit = included.reduce((sum, x) => sum + x.gross_profit * rates[x.currency], 0);
+  const grossLoss = included.reduce((sum, x) => sum + x.gross_loss * rates[x.currency], 0);
+  return { status: "READY", total_closed_trades: trades, wins, losses, break_even: be, winrate: trades ? Math.round(wins / trades * 10000) / 100 : null, profit_factor: grossLoss ? Math.round(grossProfit / grossLoss * 10000) / 10000 : null, net_pnl_usd: Math.round(net * 100) / 100, gross_profit_usd: Math.round(grossProfit * 100) / 100, gross_loss_usd: Math.round(grossLoss * 100) / 100, currencies, unsupported_currencies: excluded, last_sync_at: raw?.last_sync_at || null };
+}
+
+function brokerBound(value) {
+  if (!value) return null;
+  const match = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}:\d{2}))?$/.exec(value);
+  if (!match) return undefined;
+  const normalized = `${match[1]}T${match[2] || "00:00:00"}`;
+  const date = new Date(`${normalized}Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 19) === normalized ? normalized : undefined;
+}
+
 function randomKey() {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
   const value = [...bytes].map(x => x.toString(16).padStart(2, "0").toUpperCase()).join("");
@@ -110,8 +148,10 @@ export async function onRequest({ request, env }) {
     if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
     if (otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
     const otpCanary = otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED === "true";
-    if (performanceRoute && (env.PORTAL_PERFORMANCE_ENABLED !== "true" || env.EA_R7_TELEMETRY_READY !== "true")) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
-    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname === "member/performance" || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests");
+    const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+    const performanceCanary = env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
+    if (performanceRoute && !performanceGlobal && !performanceCanary) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
+    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname === "member/performance" || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests") || pathname.startsWith("admin/settings");
     const earlySession = earlyAuthRoute ? await verifiedUser(request, env, pathname.startsWith("admin/")) : null;
     if (earlySession?.error) return earlySession.error;
     const isMultipart = request.headers.get("content-type")?.includes("multipart/form-data");
@@ -151,6 +191,30 @@ export async function onRequest({ request, env }) {
       return response({ ok: true, member: updated[0] });
     }
 
+    if (pathname === "admin/settings" && method === "GET") {
+      const rows = await supabase(env, "helix_general_settings?setting_key=in.(usd_idr_rate,usc_per_usd,currency_usd_rates)&select=setting_key,setting_value,updated_at,change_reason");
+      const values = Object.fromEntries(rows.map(row => [row.setting_key, row.setting_value]));
+      return response({ usd_idr_rate: Number(values.usd_idr_rate || 17500), usc_per_usd: Number(values.usc_per_usd || 100), currency_usd_rates: values.currency_usd_rates || {}, updated_at: Math.max(0, ...rows.map(row => Date.parse(row.updated_at) || 0)) ? new Date(Math.max(...rows.map(row => Date.parse(row.updated_at) || 0))).toISOString() : null });
+    }
+    if (pathname === "admin/settings" && method === "PATCH") {
+      if (json.confirmed !== true) return response({ error: "CONFIRMATION_REQUIRED" }, 400);
+      const idr = Number(json.usd_idr_rate), usc = Number(json.usc_per_usd), reason = String(json.reason || "").trim();
+      const extra = json.currency_usd_rates ?? {};
+      if (!Number.isFinite(idr) || idr < 1 || idr > 1e9 || !Number.isFinite(usc) || usc < 1 || usc > 1e6 || reason.length < 3 || reason.length > 300 || !extra || typeof extra !== "object" || Array.isArray(extra)) return response({ error: "INVALID_SETTINGS" }, 400);
+      const rates = {};
+      for (const [code, raw] of Object.entries(extra)) {
+        const factor = Number(raw);
+        if (!/^[A-Z]{3,6}$/.test(code) || ["USD", "IDR", "USC"].includes(code) || !Number.isFinite(factor) || factor <= 0 || factor > 1e6) return response({ error: "INVALID_CURRENCY_RATE", currency: code }, 400);
+        rates[code] = factor;
+      }
+      const values = [["usd_idr_rate", idr], ["usc_per_usd", usc], ["currency_usd_rates", rates]];
+      for (const [key, value] of values) {
+        const saved = await supabase(env, `helix_general_settings?setting_key=eq.${encodeURIComponent(key)}`, { method: "PATCH", body: { setting_value: value, updated_at: new Date().toISOString(), updated_by: earlySession.user.id, change_reason: reason } });
+        if (!saved?.length) return response({ error: "SETTING_SAVE_FAILED", setting: key }, 503);
+      }
+      return response({ ok: true, usd_idr_rate: idr, usc_per_usd: usc, currency_usd_rates: rates, message: "Pengaturan dan alasan perubahan berhasil disimpan." });
+    }
+
     if (pathname === "member/pairings/lookup" && method === "POST") {
       const session = earlySession;
       await rateLimit(request, env, "pair_lookup", `${request.headers.get("cf-connecting-ip") || "unknown"}:${session.user.id}`, 15, 600);
@@ -175,6 +239,7 @@ export async function onRequest({ request, env }) {
 
     if (pathname === "member/performance" && method === "GET") {
       const session = earlySession;
+      await rateLimit(request, env, "member_performance", session.user.id, 30, 60);
       const uuid = /^[0-9a-f-]{36}$/i;
       const licenseId = url.searchParams.get("license_id");
       const bindingId = url.searchParams.get("binding_id");
@@ -182,11 +247,30 @@ export async function onRequest({ request, env }) {
       const toValue = url.searchParams.get("to");
       const family = url.searchParams.get("family");
       if ((licenseId && !uuid.test(licenseId)) || (bindingId && !uuid.test(bindingId)) || (family && family !== "unclassified")) return response({ error: "INVALID_FILTER" }, 400);
-      const from = fromValue ? new Date(fromValue) : null;
-      const to = toValue ? new Date(toValue) : null;
-      if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime())) || (from && to && from >= to) || (from && to && to - from > 366 * 86400000)) return response({ error: "INVALID_DATE_RANGE" }, 400);
-      const summary = await rpc(env, "helix_member_performance_summary", { p_member_id: session.user.id, p_license_id: licenseId, p_binding_id: bindingId, p_from: from?.toISOString() || null, p_to: to?.toISOString() || null, p_family: family });
-      return response(summary);
+      const from = brokerBound(fromValue), to = brokerBound(toValue);
+      if ((fromValue && from === undefined) || (toValue && to === undefined) || (from && to && from >= to)) return response({ error: "INVALID_DATE_RANGE" }, 400);
+      if (from && to && Date.parse(`${to}Z`) - Date.parse(`${from}Z`) > 366 * 86400000) return response({ error: "INVALID_DATE_RANGE" }, 400);
+      const licenseRows = await supabase(env, `helix_licenses?member_id=eq.${encodeURIComponent(session.user.id)}&deleted_at=is.null&select=id`);
+      const ownedLicenseIds = licenseRows.map(item => item.id);
+      if (licenseId && !ownedLicenseIds.includes(licenseId)) return response({ error: "INVALID_FILTER" }, 403);
+      if (bindingId) {
+        const owned = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&license_id=in.(${ownedLicenseIds.join(",")})&released_at=is.null&select=id`) : [];
+        if (!owned.length) return response({ error: "INVALID_FILTER" }, 403);
+      }
+      const allowedBindings = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${ownedLicenseIds.join(",")})&released_at=is.null&select=id`) : [];
+      if (!performanceGlobal) {
+        const testIds = allowedBindings.map(item => item.id);
+        const canary = testIds.length ? await supabase(env, `helix_telemetry_canary_allowlist?binding_id=in.(${testIds.join(",")})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id&limit=1`) : [];
+        if (!canary.length) return response({ status: "WAITING_FOR_EA_R7", message: "Performa canary hanya tersedia untuk akun demo yang terdaftar." }, 200);
+      }
+      const [raw, daily, currency] = await Promise.all([
+        rpc(env, performanceGlobal ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2", { p_member_id: session.user.id, p_license_id: licenseId, p_binding_id: bindingId, p_from: from || null, p_to: to || null }),
+        rpc(env, performanceGlobal ? "helix_member_performance_daily_v2" : "helix_member_performance_canary_daily_v2", { p_member_id: session.user.id, p_license_id: licenseId, p_binding_id: bindingId, p_from: from || null, p_to: to || null }),
+        currencyUsdRates(env),
+      ]);
+      const metrics = usdMetrics(raw, currency.rates);
+      const chart = (daily || []).filter(item => currency.rates[item.currency] != null).map(item => ({ date: item.broker_date, net_pnl_usd: Number(item.net_pnl) * currency.rates[item.currency], trades: item.trades }));
+      return response({ ...metrics, chart, currency_rates: currency.display, time_basis: "BROKER_SERVER", from: from || "2026-09-01T00:00:00", to });
     }
 
     if (pathname === "member/email-change-requests" && method === "GET") {
@@ -268,23 +352,49 @@ export async function onRequest({ request, env }) {
       const selectedWeekDate = new Date(`${weekStartValue}T00:00:00Z`);
       selectedWeekDate.setUTCDate(selectedWeekDate.getUTCDate() - ((selectedWeekDate.getUTCDay() + 6) % 7));
       weekStartValue = selectedWeekDate.toISOString().slice(0, 10);
-      const weekStart = new Date(`${weekStartValue}T00:00:00+07:00`);
-      const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
-      const priorWeekStart = new Date(weekStart.getTime() - 7 * 86400000);
-      const monthStart = new Date(`${monthValue}-01T00:00:00+07:00`);
+      const shiftDate = (value, days) => { const d = new Date(`${value}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+      const weekEnd = shiftDate(weekStartValue, 7), priorWeekStart = shiftDate(weekStartValue, -7);
+      const monthStart = `${monthValue}-01`;
       const [monthYear, monthNumber] = monthValue.split("-").map(Number);
-      const monthEnd = new Date(Date.UTC(monthYear, monthNumber, 1) - 7 * 3600000);
-      const priorMonthStart = new Date(Date.UTC(monthYear, monthNumber - 2, 1) - 7 * 3600000);
-      const monthFrom = date => date.toISOString();
-      const performanceEnabled = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+      const monthEnd = new Date(Date.UTC(monthYear, monthNumber, 1)).toISOString().slice(0, 10);
+      const priorMonthStart = new Date(Date.UTC(monthYear, monthNumber - 2, 1)).toISOString().slice(0, 10);
+      const monthFrom = date => `${date}T00:00:00`;
+      const performanceGlobalAdmin = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+      const performanceEnabled = performanceGlobalAdmin || env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
       if (performanceEnabled) await rateLimit(request, env, "admin_performance", session.user.id, 10, 60);
-      const members = await supabase(env, `helix_members?role=eq.member&select=id,email,display_name,created_at&order=created_at.desc&limit=1000`);
+      let members = await supabase(env, `helix_members?role=eq.member&select=id,email,display_name,created_at&order=created_at.desc&limit=1000`);
+      if (!performanceGlobalAdmin && performanceEnabled) {
+        const canaryBindings = await supabase(env, `helix_telemetry_canary_allowlist?expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
+        const ids = canaryBindings.map(item => item.binding_id);
+        const boundRows = ids.length ? await supabase(env, `helix_license_bindings?id=in.(${ids.join(",")})&select=license_id`) : [];
+        const licenseIds = [...new Set(boundRows.map(item => item.license_id))];
+        const owners = licenseIds.length ? await supabase(env, `helix_licenses?id=in.(${licenseIds.join(",")})&deleted_at=is.null&select=member_id`) : [];
+        const allowedMembers = new Set(owners.map(item => item.member_id));
+        members = members.filter(member => allowedMembers.has(member.id));
+      }
+      const filterMember = url.searchParams.get("member_id"), filterLicense = url.searchParams.get("license_id"), filterBinding = url.searchParams.get("binding_id");
+      if ([filterMember, filterLicense, filterBinding].some(value => value && !/^[0-9a-f-]{36}$/i.test(value))) return response({ error: "INVALID_FILTER" }, 400);
+      if (filterLicense || filterBinding) {
+        let licenseIds = filterLicense ? [filterLicense] : null;
+        if (filterBinding) {
+          const selectedBindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(filterBinding)}&select=license_id`);
+          if (!selectedBindings.length) return response({ error: "INVALID_FILTER" }, 404);
+          if (licenseIds && !licenseIds.includes(selectedBindings[0].license_id)) return response({ error: "INVALID_FILTER" }, 400);
+          licenseIds = [selectedBindings[0].license_id];
+        }
+        const selectedLicenses = await supabase(env, `helix_licenses?${filterMember ? `member_id=eq.${encodeURIComponent(filterMember)}&` : ""}id=in.(${licenseIds.join(",")})&select=id,member_id`);
+        const memberSet = new Set(selectedLicenses.map(item => item.member_id));
+        members = members.filter(member => memberSet.has(member.id));
+      }
+      if (filterMember) members = members.filter(member => member.id === filterMember);
       const total = members.length;
       const pageMembers = members.slice((page - 1) * pageSize, page * pageSize);
       const base = { members: pageMembers, page, page_size: pageSize, total_members: total, total_pages: Math.max(1, Math.ceil(total / pageSize)), week_start: weekStartValue, month: monthValue };
       if (!performanceEnabled) return response({ ...base, status: "WAITING_FOR_EA_R7", summaries: [], message: "Performa menunggu verifikasi EA dan aktivasi telemetry. Daftar member tetap live; tidak ada angka simulasi." });
 
-      const windowSummary = (memberId, from, to) => rpc(env, "helix_member_performance_summary", { p_member_id: memberId, p_license_id: null, p_binding_id: null, p_from: from, p_to: to, p_family: null });
+      const { rates: fxRates, display: fxDisplay } = await currencyUsdRates(env);
+      const summaryFunction = performanceGlobalAdmin ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2";
+      const windowSummary = async (memberId, from, to) => usdMetrics(await rpc(env, summaryFunction, { p_member_id: memberId, p_license_id: filterLicense, p_binding_id: filterBinding, p_from: from, p_to: to }), fxRates);
       const work = [...pageMembers];
       const summaries = [];
       const workers = Array.from({ length: Math.min(4, work.length) }, async () => {
@@ -292,20 +402,18 @@ export async function onRequest({ request, env }) {
           const member = work.shift();
           const [all, week, previousWeek, month, previousMonth] = await Promise.all([
             windowSummary(member.id, null, null),
-            windowSummary(member.id, monthFrom(weekStart), monthFrom(weekEnd)),
-            windowSummary(member.id, monthFrom(priorWeekStart), monthFrom(weekStart)),
+            windowSummary(member.id, monthFrom(weekStartValue), monthFrom(weekEnd)),
+            windowSummary(member.id, monthFrom(priorWeekStart), monthFrom(weekStartValue)),
             windowSummary(member.id, monthFrom(monthStart), monthFrom(monthEnd)),
             windowSummary(member.id, monthFrom(priorMonthStart), monthFrom(monthStart)),
           ]);
           const growth = (current, previous) => {
             if (current.status === "MIXED_CURRENCY" || previous.status === "MIXED_CURRENCY") return { status: "MIXED_CURRENCY", net_pnl: null, growth_pct: null, currency: null };
-            const currentPnl = current.status === "READY" ? Number(current.net_pnl) : 0;
-            const previousPnl = previous.status === "READY" ? Number(previous.net_pnl) : 0;
-            const currency = current.currency || previous.currency || null;
-            if (current.currency && previous.currency && current.currency !== previous.currency) return { status: "MIXED_CURRENCY", net_pnl: null, growth_pct: null, currency: null };
-            if (!currency) return { status: "NO_DATA", net_pnl: null, growth_pct: null, currency: null };
+            const currentPnl = current.status === "READY" ? Number(current.net_pnl_usd) : 0;
+            const previousPnl = previous.status === "READY" ? Number(previous.net_pnl_usd) : 0;
+            if (!current.total_closed_trades && !previous.total_closed_trades) return { status: "NO_DATA", net_pnl_usd: null, growth_pct: null };
             const growthPct = previousPnl === 0 ? (currentPnl === 0 ? 0 : null) : Math.round(((currentPnl - previousPnl) / Math.abs(previousPnl)) * 10000) / 100;
-            return { status: "READY", net_pnl: currentPnl, growth_pct: growthPct, currency };
+            return { status: "READY", net_pnl_usd: currentPnl, growth_pct: growthPct };
           };
           summaries.push({ member_id: member.id, lifetime: all, weekly: growth(week, previousWeek), monthly: growth(month, previousMonth) });
         }
@@ -315,7 +423,7 @@ export async function onRequest({ request, env }) {
         if (error?.message?.includes("DATABASE_HTTP_404")) return response({ error: "MEMBER_PERFORMANCE_FUNCTION_MISSING", message: "Fungsi helix_member_performance_summary belum ada. Verifikasi penerapan migration telemetry dasar sebelum melanjutkan." }, 503);
         throw error;
       }
-      return response({ ...base, status: "READY", summaries });
+      return response({ ...base, status: performanceGlobalAdmin ? "READY" : "CANARY", summaries, currency_rates: fxDisplay, applied_filters: { member_id: filterMember, license_id: filterLicense, binding_id: filterBinding }, message: performanceGlobalAdmin ? null : "Data ini hanya akun demo yang terdaftar untuk canary; Performance Global tetap OFF." });
     }
 
     if (pathname === "admin/members" && method === "POST") {
