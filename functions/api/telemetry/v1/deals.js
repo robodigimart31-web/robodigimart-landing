@@ -30,11 +30,11 @@ export async function onRequestPost({ request, env }) {
   try {
     const secret = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
     if (!secret || secret.length < 40) return json({ error: "SESSION_PROOF_REQUIRED" }, 401, headers);
+    const globalEnabled = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+    if (!globalEnabled && env.PORTAL_PERFORMANCE_CANARY_ENABLED !== "true") return json({ error: "FEATURE_NOT_ACTIVATED", feature: "trading_performance", message: "Trading Performance menunggu verifikasi telemetry EA R7." }, 503, headers);
     await rateLimit(request, env, "telemetry_ingest", await sha256(secret), 30, 600);
     const input = await readJson(request, 1_500_000);
     if (input.schema_version !== "2-broker-time" || input.time_basis !== "BROKER_SERVER" || !Number.isSafeInteger(input.magic_base) || input.magic_base < 1 || input.magic_base > Number.MAX_SAFE_INTEGER - 47 || !Array.isArray(input.deals) || input.deals.length < 1 || input.deals.length > 180 || !input.deals.every(deal => validateDeal(deal, input.magic_base))) return json({ error: "INVALID_DEALS_PAYLOAD" }, 422, headers);
-    const globalEnabled = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
-    if (!globalEnabled && env.PORTAL_PERFORMANCE_CANARY_ENABLED !== "true") return json({ error: "FEATURE_NOT_ACTIVATED", feature: "trading_performance", message: "Trading Performance menunggu verifikasi telemetry EA R7." }, 503, headers);
     const result = await rpc(env, "helix_ingest_telemetry_deals_v2", { p_session_hash: await sha256(secret), p_magic_base: input.magic_base, p_deals: input.deals, p_global_enabled: globalEnabled });
     if (!result.ok) return json({ error: result.error_code || "TELEMETRY_REJECTED" }, 403, headers);
     return json({ ok: true, accepted: result.accepted, updated_trades: result.updated_trades, synced_at: result.synced_at }, 200, headers);

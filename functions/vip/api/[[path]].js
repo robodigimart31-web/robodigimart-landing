@@ -320,7 +320,7 @@ export async function onRequest({ request, env }) {
       const [members, licenses, bindings, events, announcements, materials, authUsers] = await Promise.all([
         supabase(env, "helix_members?select=id,email,display_name,role,created_at&order=created_at.desc"),
         listLicenses(env),
-        supabase(env, "helix_license_bindings?select=id,license_id,broker_server,account_login,mode,last_sync_at,released_at&order=first_seen_at.desc"),
+        supabase(env, "helix_license_bindings?select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at&order=first_seen_at.desc"),
         supabase(env, "helix_license_events?select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100"),
         supabase(env, "helix_announcements?select=id,title,body,kind,published,published_at,created_at&order=created_at.desc"),
         supabase(env, "helix_materials?select=id,title,description,kind,storage_path,published,created_at&order=created_at.desc"),
@@ -337,6 +337,98 @@ export async function onRequest({ request, env }) {
 
     const session = await requireUser(request, env, pathname.startsWith("admin/"));
     if (session.error) return session.error;
+
+    if (pathname === "admin/performance/accounts" && method === "GET") {
+      const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+      const canaryOn = env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
+      if (!performanceGlobal && !canaryOn) return response({ status: "WAITING_FOR_EA_R7", accounts: [], message: "Performance belum diaktifkan." });
+      await rateLimit(request, env, "admin_performance_accounts", session.user.id, 20, 60);
+      const validId = value => !value || /^[0-9a-f-]{36}$/i.test(value);
+      const memberFilter = url.searchParams.get("member_id"), licenseFilter = url.searchParams.get("license_id"), bindingFilter = url.searchParams.get("binding_id");
+      if (![memberFilter, licenseFilter, bindingFilter].every(validId)) return response({ error: "INVALID_FILTER" }, 400);
+      const fromValue = brokerBound(url.searchParams.get("from") || "2026-09-01T00:00:00");
+      const toValue = brokerBound(url.searchParams.get("to"));
+      if (fromValue === undefined || toValue === undefined || (toValue && toValue <= fromValue)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const from = fromValue < "2026-09-01T00:00:00" ? "2026-09-01T00:00:00" : fromValue;
+      let canaryIds = null;
+      if (!performanceGlobal) {
+        const rows = await supabase(env, `helix_telemetry_canary_allowlist?expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id`);
+        canaryIds = [...new Set(rows.map(row => row.binding_id))];
+        if (!canaryIds.length) return response({ status: "CANARY", accounts: [], message: "Belum ada akun canary aktif." });
+      }
+      const clauses = ["released_at=is.null", "select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at,first_seen_at", "order=first_seen_at.desc", "limit=1000"];
+      if (bindingFilter && canaryIds && !canaryIds.includes(bindingFilter)) return response({ error: "INVALID_FILTER" }, 404);
+      if (bindingFilter) clauses.push(`id=eq.${encodeURIComponent(bindingFilter)}`);
+      else if (canaryIds) clauses.push(`id=in.(${canaryIds.join(",")})`);
+      const bindings = await supabase(env, `helix_license_bindings?${clauses.join("&")}`);
+      if (!bindings.length) return response({ status: performanceGlobal ? "READY" : "CANARY", accounts: [], message: "Tidak ada akun MT5 untuk filter ini." });
+      const licenseIds = [...new Set(bindings.map(row => row.license_id))];
+      const licenses = await supabase(env, `helix_licenses?id=in.(${licenseIds.join(",")})&deleted_at=is.null&select=id,member_id,product_slug,status,expires_at,license_key_hint`);
+      const liveLicenses = new Map(licenses.map(row => [row.id, row]));
+      const allowedBindings = bindings.filter(row => liveLicenses.has(row.license_id));
+      if (licenseFilter && !allowedBindings.some(row => row.license_id === licenseFilter)) return response({ error: "INVALID_FILTER" }, 404);
+      let selected = allowedBindings.filter(row => !licenseFilter || row.license_id === licenseFilter);
+      const ownerIds = [...new Set(selected.map(row => liveLicenses.get(row.license_id).member_id))];
+      if (memberFilter && !ownerIds.includes(memberFilter)) return response({ error: "INVALID_FILTER" }, 404);
+      if (memberFilter) selected = selected.filter(row => liveLicenses.get(row.license_id).member_id === memberFilter);
+      if (!selected.length) return response({ status: performanceGlobal ? "READY" : "CANARY", accounts: [] });
+      const selectedBindingIds = selected.map(row => row.id);
+      const selectedOwnerIds = [...new Set(selected.map(row => liveLicenses.get(row.license_id).member_id))];
+      const [members, sessions, { rates, display: fxDisplay }] = await Promise.all([
+        supabase(env, `helix_members?id=in.(${selectedOwnerIds.join(",")})&select=id,email,display_name`),
+        supabase(env, `helix_license_sessions?binding_id=in.(${selectedBindingIds.join(",")})&select=binding_id,last_telemetry_sync_at&order=last_telemetry_sync_at.desc&limit=5000`),
+        currencyUsdRates(env),
+      ]);
+      const memberById = new Map(members.map(row => [row.id, row]));
+      const latestSync = new Map();
+      for (const row of sessions) if (row.last_telemetry_sync_at && (!latestSync.has(row.binding_id) || row.last_telemetry_sync_at > latestSync.get(row.binding_id))) latestSync.set(row.binding_id, row.last_telemetry_sync_at);
+      const dataByBinding = new Map(), summaryFunction = performanceGlobal ? "helix_member_performance_summary_v2" : "helix_member_performance_canary_summary_v2", work = [...selected];
+      const summaryWorkers = Array.from({ length: Math.min(4, work.length) }, async () => {
+        while (work.length) {
+          const binding = work.shift(), license = liveLicenses.get(binding.license_id);
+          const raw = await rpc(env, summaryFunction, { p_member_id: license.member_id, p_license_id: license.id, p_binding_id: binding.id, p_from: from, p_to: toValue });
+          dataByBinding.set(binding.id, usdMetrics(raw, rates));
+        }
+      });
+      await Promise.all(summaryWorkers);
+      const accounts = selected.map(binding => {
+        const license = liveLicenses.get(binding.license_id), member = memberById.get(license.member_id);
+        const metrics = dataByBinding.get(binding.id) || { status: "NO_DATA", total_closed_trades: 0 };
+        metrics.last_sync_at = latestSync.get(binding.id) || null;
+        const now = Date.now(), expired = license.expires_at && Date.parse(license.expires_at) <= now;
+        return { member_id: license.member_id, member_name: member?.display_name || "Member", member_email: member?.email || "", license_id: license.id, license: license.license_key_hint || license.product_slug, license_status: expired ? "expired" : license.status, binding_id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, status: binding.released_at ? "released" : expired ? "expired" : license.status, last_sync_at: latestSync.get(binding.id) || binding.last_sync_at || null, metrics };
+      });
+      return response({ status: performanceGlobal ? "READY" : "CANARY", accounts, currency_rates: fxDisplay, applied_filters: { member_id: memberFilter, license_id: licenseFilter, binding_id: bindingFilter, from, to: toValue }, message: performanceGlobal ? null : "Data hanya mencakup akun telemetry canary yang masih aktif; Performance Global tetap OFF." });
+    }
+
+    if (pathname === "admin/performance/details" && method === "GET") {
+      const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
+      if (!performanceGlobal && env.PORTAL_PERFORMANCE_CANARY_ENABLED !== "true") return response({ error: "PERFORMANCE_NOT_ENABLED" }, 403);
+      await rateLimit(request, env, "admin_performance_details", session.user.id, 30, 60);
+      const bindingId = url.searchParams.get("binding_id"), page = Number(url.searchParams.get("page") || 1), pageSize = 50;
+      if (!/^[0-9a-f-]{36}$/i.test(bindingId || "") || !Number.isInteger(page) || page < 1 || page > 10000) return response({ error: "INVALID_FILTER" }, 400);
+      const fromValue = brokerBound(url.searchParams.get("from") || "2026-09-01T00:00:00"), toValue = brokerBound(url.searchParams.get("to"));
+      if (fromValue === undefined || toValue === undefined || (toValue && toValue <= fromValue)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
+      const from = fromValue < "2026-09-01T00:00:00" ? "2026-09-01T00:00:00" : fromValue;
+      const bindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&select=id,license_id,broker_server,account_login,mode,magic_base,released_at&limit=1`);
+      const binding = bindings[0]; if (!binding || binding.released_at) return response({ error: "BINDING_NOT_FOUND" }, 404);
+      if (!performanceGlobal) {
+        const canary = await supabase(env, `helix_telemetry_canary_allowlist?binding_id=eq.${encodeURIComponent(bindingId)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=binding_id&limit=1`);
+        if (!canary.length || binding.mode !== "demo") return response({ error: "PERFORMANCE_CANARY_ONLY" }, 403);
+      }
+      const licenses = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(binding.license_id)}&deleted_at=is.null&select=id,member_id,status,expires_at&limit=1`);
+      if (!licenses.length) return response({ error: "LICENSE_NOT_FOUND" }, 404);
+      const params = [`binding_id=eq.${encodeURIComponent(bindingId)}`, `closed_at_broker=gte.${encodeURIComponent(from)}`];
+      if (toValue) params.push(`closed_at_broker=lt.${encodeURIComponent(toValue)}`);
+      params.push("select=position_id,currency,symbol,net_pnl,outcome,opened_at_broker,closed_at_broker", "order=closed_at_broker.desc", `limit=${pageSize + 1}`, `offset=${(page - 1) * pageSize}`);
+      const pageTrades = await supabase(env, `helix_completed_trades?${params.join("&")}`), hasMore = pageTrades.length > pageSize, trades = pageTrades.slice(0, pageSize);
+      const positionIds = [...new Set(trades.map(row => row.position_id))];
+      let deals = [];
+      if (positionIds.length) deals = await supabase(env, `helix_telemetry_deals?binding_id=eq.${encodeURIComponent(bindingId)}&position_id=in.(${positionIds.map(encodeURIComponent).join(",")})&select=deal_ticket,position_id,occurred_at_broker,direction,entry_kind,volume,profit,commission,swap,fee,currency,symbol,magic&order=occurred_at_broker.asc&limit=5000`);
+      const dealsByPosition = new Map();
+      for (const deal of deals) { const list = dealsByPosition.get(deal.position_id) || []; list.push(deal); dealsByPosition.set(deal.position_id, list); }
+      return response({ status: performanceGlobal ? "READY" : "CANARY", binding: { id: binding.id, broker_server: binding.broker_server, account_login: binding.account_login, mode: binding.mode, magic_base: binding.magic_base, license_status: licenses[0].status }, trades: trades.map(trade => ({ ...trade, deals: dealsByPosition.get(trade.position_id) || [] })), page, page_size: pageSize, has_more: hasMore, from, to: toValue });
+    }
 
     if (pathname === "admin/performance" && method === "GET") {
       const requestedPage = Number(url.searchParams.get("page") || 1);
