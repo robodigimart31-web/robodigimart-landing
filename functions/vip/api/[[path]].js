@@ -9,6 +9,14 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
 const CONTENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ANNOUNCEMENT_KINDS = new Set(["update", "maintenance", "information", "general"]);
 const MATERIAL_KINDS = new Set(["video", "guide", "file", "strategy"]);
+function oneCalendarMonthAgo() {
+  const now = new Date();
+  const year = now.getUTCFullYear(), month = now.getUTCMonth() - 1, day = now.getUTCDate();
+  const cutoffMonth = new Date(Date.UTC(year, month, 1, now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds()));
+  const lastDay = new Date(Date.UTC(cutoffMonth.getUTCFullYear(), cutoffMonth.getUTCMonth() + 1, 0)).getUTCDate();
+  cutoffMonth.setUTCDate(Math.min(day, lastDay));
+  return cutoffMonth.toISOString();
+}
 export function contentText(value, max, label, required = false) {
   const result = String(value ?? "").trim();
   if ((required && !result) || result.length > max) throw Object.assign(new Error(`${label} wajib diisi dan maksimal ${max} karakter.`), { status: 400 });
@@ -276,7 +284,8 @@ export async function onRequest({ request, env }) {
       }
       const licenseIds = licenses.map(x => x.id);
       const releaseAckV18k = env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true";
-      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&${releaseAckV18k ? "" : "released_at=is.null&"}select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at${releaseAckV18k ? ",released_at,release_state,release_request_id,release_requested_at" : ""}`) : [];
+      const retentionFilter = releaseAckV18k ? `or=(released_at.is.null,released_at.gte.${encodeURIComponent(oneCalendarMonthAgo())})&` : "released_at=is.null&";
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&${retentionFilter}select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at${releaseAckV18k ? ",released_at,release_state,release_request_id,release_requested_at" : ""}`) : [];
       if (releaseAckV18k) {
         const offlineBefore = Date.now() - 30 * 60_000;
         for (const binding of bindings) {
@@ -475,10 +484,12 @@ export async function onRequest({ request, env }) {
     if (pathname === "admin" && method === "GET") {
       const session = await requireUser(request, env, true);
       if (session.error) return session.error;
+      const releaseAckV18k = env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true";
+      const retentionFilter = releaseAckV18k ? `or=(released_at.is.null,released_at.gte.${encodeURIComponent(oneCalendarMonthAgo())})&` : "";
       const [members, licenses, bindings, events, announcements, materials, authUsers] = await Promise.all([
         supabase(env, "helix_members?select=id,email,display_name,role,created_at&order=created_at.desc"),
         listLicenses(env),
-        supabase(env, `helix_license_bindings?select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at${env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true" ? ",release_state,release_request_id,release_requested_at" : ""}&order=first_seen_at.desc`),
+        supabase(env, `helix_license_bindings?${retentionFilter}select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at${releaseAckV18k ? ",release_state,release_request_id,release_requested_at" : ""}&order=first_seen_at.desc`),
         supabase(env, "helix_license_events?select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100"),
         supabase(env, "helix_announcements?select=id,title,body,kind,published,published_at,created_at&order=created_at.desc"),
         supabase(env, "helix_materials?select=id,title,description,kind,storage_path,published,created_at&order=created_at.desc"),
