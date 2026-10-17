@@ -63,6 +63,16 @@ async function authUser(token, env) {
   return result.json();
 }
 
+async function verifyPassword(email, password, env) {
+  if (!email || !password) return false;
+  const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { apikey: env.SUPABASE_PUBLISHABLE_KEY || "sb_publishable_FDLLBcmYFGiS9PDbyvgDtQ_UWUB8fUc", "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return result.ok;
+}
+
 async function requireUser(request, env, admin = false) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const user = await authUser(token, env);
@@ -378,14 +388,20 @@ export async function onRequest({ request, env }) {
 
     if (pathname === "member/email-change-requests" && method === "POST") {
       const session = earlySession;
+      await rateLimit(request, env, "email_change_password", `${request.headers.get("cf-connecting-ip") || "unknown"}:${session.user.id}`, 5, 900);
       const email = String(json.new_email || "").trim().toLowerCase();
+      const oldEmail = String(json.old_email || "").trim().toLowerCase();
+      const password = String(json.password || "");
       const note = String(json.note || "").trim().slice(0, 300);
+      if (!password || password.length > 200 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return response({ error: "INVALID_REQUEST" }, 400);
+      if (oldEmail !== String(session.member.email || "").trim().toLowerCase()) return response({ error: "OLD_EMAIL_MISMATCH" }, 400);
+      if (!(await verifyPassword(oldEmail, password, env))) return response({ error: "INVALID_PASSWORD" }, 401);
       const result = await rpc(env, "helix_email_change_request", { p_member_id: session.user.id, p_new_email: email, p_note: note });
       return result?.ok ? response(result, 201) : response({ error: result?.error_code || "REQUEST_REJECTED" }, 400);
     }
 
     if (pathname === "admin/email-change-requests" && method === "GET") {
-      const requests = await supabase(env, "helix_email_change_requests?select=id,member_id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&status=in.(pending,approved_awaiting_verification)&order=created_at.asc&limit=200");
+      const requests = await supabase(env, "helix_email_change_requests?select=id,member_id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&status=eq.pending&order=created_at.asc&limit=200");
       const members = await supabase(env, "helix_members?select=id,display_name,email");
       const byId = new Map(members.map(member => [member.id, member]));
       return response({ requests: requests.map(item => ({ ...item, member: byId.get(item.member_id) || null })) });
@@ -394,12 +410,52 @@ export async function onRequest({ request, env }) {
     if (pathname.startsWith("admin/email-change-requests/") && method === "POST") {
       const requestId = pathname.split("/").at(-1);
       if (!/^[0-9a-f-]{36}$/i.test(requestId) || !["approve", "reject"].includes(json.action)) return response({ error: "INVALID_REQUEST" }, 400);
-      const rows = await supabase(env, `helix_email_change_requests?id=eq.${encodeURIComponent(requestId)}&select=id,member_id,new_email,status`);
+      const rows = await supabase(env, `helix_email_change_requests?id=eq.${encodeURIComponent(requestId)}&select=id,member_id,new_email,status,admin_note`);
       const item = rows?.[0];
       if (!item) return response({ error: "REQUEST_NOT_FOUND" }, 404);
-      const decision = await rpc(env, "helix_email_change_decide", { p_request_id: requestId, p_actor_id: earlySession.user.id, p_approve: json.action === "approve", p_note: String(json.note || "").slice(0, 300) });
+      if (item.status !== "pending") return response({ error: "REQUEST_NOT_PENDING" }, 409);
+      if (json.action === "approve") {
+        const email = String(json.email || item.new_email).trim().toLowerCase();
+        const displayName = String(json.display_name || "").trim().replace(/\s+/g, " ");
+        if (email !== String(item.new_email).trim().toLowerCase() || !/^\S+@\S+\.\S+$/.test(email)) return response({ error: "EMAIL_MISMATCH", message: "Email invitation harus sama dengan email baru pada request." }, 400);
+        if (displayName.length < 2 || displayName.length > 80) return response({ error: "INVALID_DISPLAY_NAME" }, 400);
+        const inviteMarker = /^email_change_invite_sent:([0-9a-f-]{36})$/i.exec(String(item.admin_note || ""));
+        let memberRows = inviteMarker
+          ? await supabase(env, `helix_members?id=eq.${encodeURIComponent(inviteMarker[1])}&select=id,email`)
+          : await supabase(env, `helix_members?email=eq.${encodeURIComponent(email)}&select=id,email&limit=1`);
+        if (memberRows.length && !inviteMarker) return response({ error: "EMAIL_ALREADY_REGISTERED", message: "Email baru sudah memiliki akun. Request tetap pending; verifikasi kepemilikan akun tersebut secara manual." }, 409);
+        if (memberRows[0] && String(memberRows[0].email).trim().toLowerCase() !== email) return response({ error: "INVITE_EMAIL_MISMATCH" }, 409);
+        let invited = null;
+        if (!memberRows.length) {
+          invited = await adminAuth(env, `invite?redirect_to=${encodeURIComponent(`${portalBaseUrl(env)}/vip/login?flow=invite`)}`, "POST", { email, data: { full_name: displayName } });
+          const invitedId = invited.user?.id || invited.id;
+          memberRows = invitedId
+            ? await supabase(env, `helix_members?id=eq.${encodeURIComponent(invitedId)}&select=id,email`)
+            : await supabase(env, `helix_members?email=eq.${encodeURIComponent(email)}&select=id,email&limit=1`);
+          if (memberRows[0]) {
+            await supabase(env, `helix_email_change_requests?id=eq.${encodeURIComponent(requestId)}&status=eq.pending`, { method: "PATCH", body: { admin_note: `email_change_invite_sent:${memberRows[0].id}` } });
+          }
+        }
+        if (!memberRows.length) return response({ error: "INVITE_MEMBER_PROFILE_NOT_READY", invitation_sent: Boolean(invited), message: "Invitation terkirim, tetapi profil member belum tersedia. Request tetap pending; periksa profil dan jangan kirim ulang invitation." }, 503);
+        const license = await rpc(env, "helix_admin_create_license", {
+          p_member_id: memberRows[0].id, p_actor_id: earlySession.user.id, p_product_slug: "quadriga",
+          p_legacy_hash: await digest(randomKey()), p_duration_days: 730, p_max_accounts: 5,
+          p_idempotency_key: requestId, p_memo: `Email change request ${requestId}`,
+        });
+        if (!license?.ok) return response({ error: license?.error_code || "INVITE_LICENSE_CREATION_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, message: "License baru gagal dibuat. Request tetap pending; periksa license sebelum retry." }, 503);
+        const suspension = await rpc(env, "helix_admin_set_member_suspended", { p_member_id: item.member_id, p_actor_id: earlySession.user.id, p_suspended: true, p_reason: `Email change completed (${requestId}); old account access retired.` });
+        if (!suspension?.ok) return response({ error: suspension?.error_code || "OLD_ACCOUNT_SUSPEND_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, message: "Invitation/license baru sudah tersedia tetapi akun lama belum disuspend. Request tetap pending; jangan kirim ulang invitation." }, 503);
+        try {
+          await adminAuth(env, `admin/users/${encodeURIComponent(item.member_id)}`, "PUT", { ban_duration: "876000h" });
+        } catch {
+          return response({ error: "OLD_ACCOUNT_AUTH_SUSPEND_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, old_license_suspended: true, message: "License lama sudah disuspend tetapi blokir Auth gagal. Request tetap pending; periksa Auth dan jangan kirim ulang invitation." }, 503);
+        }
+        const decision = await rpc(env, "helix_email_change_complete", { p_request_id: requestId, p_actor_id: earlySession.user.id, p_note: `Invitation/license issued to ${email}; old account suspended.` });
+        return decision?.ok ? response({ ...decision, new_member_id: memberRows[0].id, license: license.license, old_account: { suspended: true, licenses_changed: suspension.licenses_changed, sessions_revoked: suspension.sessions_revoked } }) : response({ error: decision?.error_code || "REQUEST_COMPLETE_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, old_account_suspended: true }, 503);
+      }
+      const decision = await rpc(env, "helix_email_change_decide", { p_request_id: requestId, p_actor_id: earlySession.user.id, p_approve: false, p_note: String(json.note || "").slice(0, 300) });
       if (!decision?.ok) return response({ error: decision?.error_code || "REQUEST_REJECTED" }, 400);
-      return response({ ok: true, status: json.action === "approve" ? "approved_awaiting_verification" : "rejected", message: json.action === "approve" ? "Disetujui. Member perlu memulai verifikasi alamat baru dari menu profil." : "Permintaan ditolak." });
+      return response({ ok: true, status: "rejected", message: "Permintaan ditolak." });
     }
 
     if (pathname.startsWith("member/bindings/") && method === "POST") {

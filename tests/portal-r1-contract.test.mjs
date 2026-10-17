@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import vm from 'node:vm';
@@ -102,6 +102,64 @@ test('production portal flags default closed and performance requires explicit R
   const staged=await portalStatus({env:{PORTAL_LICENSE_RELEASE_ACK_V18K:'true'}});assert.equal((await staged.json()).readiness.license_release_ack_v18k,'enabled');
   const r7=await portalStatus({env:{PORTAL_PERFORMANCE_ENABLED:'true'}});
   assert.equal((await r7.json()).features.trading_performance,false);
+});
+
+test('email-change production flag is enabled while preview remains closed', async () => {
+  const config=JSON.parse((await readFile(new URL('../wrangler.jsonc',import.meta.url),'utf8')));
+  assert.equal(config.env.production.vars.PORTAL_EMAIL_CHANGE_ENABLED,'true');
+  assert.equal(config.env.preview.vars.PORTAL_EMAIL_CHANGE_ENABLED,'false');
+});
+
+test('manual email-change approval UI collects a name and sends invitation from the request queue', async () => {
+  const ui=await readFile(new URL('../public/vip/helix-ui/js/portal-r1.js',import.meta.url),'utf8');
+  assert.match(ui,/data-r1-email-approve/);assert.match(ui,/data-email="\$\{esc\(r\.new_email\)\}"/);
+  assert.match(ui,/Kirim invitation email baru/);assert.match(ui,/action:'approve',email:button\.dataset\.email,display_name/);
+  assert.match(ui,/window\.addEventListener\('click'/);
+});
+
+test('admin email-change approval provisions new email/license before suspending the old account', async t => {
+  const actor='00000000-0000-4000-8000-000000000101',oldMember='00000000-0000-4000-8000-000000000102',newMember='00000000-0000-4000-8000-000000000103',requestId='00000000-0000-4000-8000-000000000104';
+  const events=[];let licenseArgs;
+  t.mock.method(globalThis,'fetch',async(input,options={})=>{
+    const url=new URL(String(input)),path=url.pathname,body=options.body?JSON.parse(options.body):null;
+    if(path==='/auth/v1/user')return Response.json({id:actor});
+    if(path==='/rest/v1/helix_members'&&url.searchParams.get('id')===`eq.${actor}`)return Response.json([{id:actor,email:'admin@example.test',display_name:'Admin',role:'admin'}]);
+    if(path==='/rest/v1/helix_member_suspensions')return Response.json([]);
+    if(path==='/rest/v1/helix_email_change_requests'&&url.searchParams.has('id'))return Response.json([{id:requestId,member_id:oldMember,new_email:'new@example.test',status:'pending'}]);
+    if(path==='/rest/v1/helix_members'&&url.searchParams.has('email'))return Response.json([]);
+    if(path==='/auth/v1/invite'){events.push('invite');assert.equal(body.email,'new@example.test');return Response.json({user:{id:newMember,email:body.email}})}
+    if(path==='/rest/v1/helix_members'&&url.searchParams.get('id')===`eq.${newMember}`)return Response.json([{id:newMember,email:'new@example.test'}]);
+    if(path==='/rest/v1/rpc/helix_admin_create_license'){events.push('license');licenseArgs=body;return Response.json({ok:true,license:{id:'license-new'}})}
+    if(path==='/rest/v1/rpc/helix_admin_set_member_suspended'){events.push('suspend');return Response.json({ok:true,licenses_changed:1,sessions_revoked:true})}
+    if(path===`/auth/v1/admin/users/${oldMember}`&&options.method==='PUT'){events.push('auth-ban');return Response.json({id:oldMember})}
+    if(path==='/rest/v1/rpc/helix_email_change_complete'){events.push('complete');return Response.json({ok:true,status:'completed',member_id:oldMember,new_email:'new@example.test'})}
+    throw new Error(`Unexpected request ${options.method||'GET'} ${url}`);
+  });
+  const request=new Request(`https://local.test/vip/api/admin/email-change-requests/${requestId}`,{method:'POST',headers:{authorization:'Bearer admin-session','content-type':'application/json'},body:JSON.stringify({action:'approve',email:'new@example.test',display_name:'New Member'})});
+  const result=await vipApi({request,env:{SUPABASE_URL:'https://supabase.test',SUPABASE_SERVICE_ROLE_KEY:'test-service-key',PORTAL_EMAIL_CHANGE_ENABLED:'true'}});
+  assert.equal(result.status,200,JSON.stringify(await result.clone().json()));assert.equal((await result.json()).status,'completed');assert.deepEqual(events,['invite','license','suspend','auth-ban','complete']);
+  assert.equal(licenseArgs.p_idempotency_key,requestId);assert.equal(licenseArgs.p_member_id,newMember);
+});
+
+test('failed invite-license creation keeps the old account active and the request pending', async t => {
+  const actor='00000000-0000-4000-8000-000000000111',oldMember='00000000-0000-4000-8000-000000000112',newMember='00000000-0000-4000-8000-000000000113',requestId='00000000-0000-4000-8000-000000000114';
+  const events=[];
+  t.mock.method(globalThis,'fetch',async(input,options={})=>{
+    const url=new URL(String(input)),path=url.pathname,body=options.body?JSON.parse(options.body):null;
+    if(path==='/auth/v1/user')return Response.json({id:actor});
+    if(path==='/rest/v1/helix_members'&&url.searchParams.get('id')===`eq.${actor}`)return Response.json([{id:actor,email:'admin@example.test',display_name:'Admin',role:'admin'}]);
+    if(path==='/rest/v1/helix_member_suspensions')return Response.json([]);
+    if(path==='/rest/v1/helix_email_change_requests'&&url.searchParams.has('id'))return Response.json([{id:requestId,member_id:oldMember,new_email:'new@example.test',status:'pending'}]);
+    if(path==='/rest/v1/helix_members'&&url.searchParams.has('email'))return Response.json([]);
+    if(path==='/auth/v1/invite'){events.push('invite');return Response.json({user:{id:newMember,email:body.email}})}
+    if(path==='/rest/v1/helix_members'&&url.searchParams.get('id')===`eq.${newMember}`)return Response.json([{id:newMember,email:'new@example.test'}]);
+    if(path==='/rest/v1/rpc/helix_admin_create_license'){events.push('license');return Response.json({ok:false,error_code:'LICENSE_CREATE_FAILED'})}
+    if(path==='/rest/v1/rpc/helix_admin_set_member_suspended'){events.push('suspend');return Response.json({ok:true})}
+    throw new Error(`Unexpected request ${options.method||'GET'} ${url}`);
+  });
+  const request=new Request(`https://local.test/vip/api/admin/email-change-requests/${requestId}`,{method:'POST',headers:{authorization:'Bearer admin-session','content-type':'application/json'},body:JSON.stringify({action:'approve',email:'new@example.test',display_name:'New Member'})});
+  const result=await vipApi({request,env:{SUPABASE_URL:'https://supabase.test',SUPABASE_SERVICE_ROLE_KEY:'test-service-key',PORTAL_EMAIL_CHANGE_ENABLED:'true'}});
+  assert.equal(result.status,503);assert.equal((await result.json()).error,'LICENSE_CREATE_FAILED');assert.deepEqual(events,['invite','license']);
 });
 
 test('OTP start stays disabled without database calls until owner activates flag', async t => {
