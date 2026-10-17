@@ -23,6 +23,16 @@ export function parseReport(html) {
   const start = date(period[2]), end = date(period[3]);
   if (!Number.isFinite(Date.parse(start)) || Date.parse(end) < Date.parse(start)) throw new Error('Invalid period');
   const initial = number(field('Initial Deposit')), profit = number(field('Total Net Profit'));
+  const detailFields = [
+    'Bars','Ticks','Symbols','Gross Profit','Gross Loss','Balance Drawdown Absolute','Balance Drawdown Maximal','Balance Drawdown Relative',
+    'Equity Drawdown Absolute','Equity Drawdown Maximal','Equity Drawdown Relative','Expected Payoff','Margin Level','Recovery Factor',
+    'Sharpe Ratio','Z-Score','AHPR','GHPR','LR Correlation','OnTester result','LR Standard Error','Total Deals',
+    'Short Trades (won %)','Long Trades (won %)','Profit Trades (% of total)','Loss Trades (% of total)','Largest profit trade','Largest loss trade',
+    'Average profit trade','Average loss trade','Maximum consecutive wins ($)','Maximum consecutive losses ($)',
+    'Maximal consecutive profit (count)','Maximal consecutive loss (count)','Average consecutive wins','Average consecutive losses',
+    'Leverage','Expert',
+  ];
+  const details = Object.fromEntries(detailFields.map(name => [name, field(name)]));
   const header = rows.findIndex(r => r[0] === 'Time' && r.includes('Deal') && r.includes('Balance'));
   if (header < 0) throw new Error('Missing Deals table');
   const columns = rows[header];
@@ -52,14 +62,37 @@ export function parseReport(html) {
   const points = [{recorded_at:start,balance:initial,equity:null}, ...[...daily].sort(([a],[b]) => a.localeCompare(b)).map(([day,balance]) => ({recorded_at:day.replace('00:00:00','23:59:59'),balance,equity:null}))];
   return {
     report: {series_slug:'quadriga',kind:'backtest',label:'HELIX QUADRIGA',account_type:'backtest',broker_label:field('Company'),currency:field('Currency'),symbol:field('Symbol'),initial_balance:initial,net_profit:profit,win_rate:winRate,profit_factor:number(field('Profit Factor')),max_drawdown_pct:dd,total_trades:number(field('Total Trades')),period_start:start,period_end:end,updated_at:new Date().toISOString()},
-    chart_basis:'balance',timeframe:period[1],history_quality:field('History Quality'),points,
+    chart_basis:'balance',timeframe:period[1],history_quality:field('History Quality'),details,points,
+  };
+}
+export function parseTesterLog(log, report) {
+  const run = log.match(/testing of Experts\\([^\s]+) from (\d{4}\.\d{2}\.\d{2}) 00:00 to (\d{4}\.\d{2}\.\d{2}) 00:00/);
+  const final = log.match(/final balance ([\d ]+(?:\.\d+)?) ([A-Z]{3})/);
+  const generated = log.match(/: ([\d ]+) ticks, ([\d ]+) bars generated/);
+  const missing = log.match(/real ticks absent for (\d+) minutes of ([\d ]+) total minute bars, every tick generation used/);
+  const missingDays = log.match(/real ticks absent for (\d+) whole days/);
+  if (!run || !final || !generated) throw new Error('Tester log is missing run dates, final balance, or generated tick/bar totals');
+  const start = date(run[2]), end = date(run[3]), finalBalance = number(final[1]);
+  if (start !== report.period_start || end !== report.period_end || final[2] !== report.currency || Math.abs(finalBalance - report.initial_balance - report.net_profit) > .02) {
+    throw new Error('Tester log run dates or final balance do not match the HTML report');
+  }
+  return {
+    expert_file: run[1], final_balance: finalBalance, currency: final[2], ticks: number(generated[1]), bars: number(generated[2]),
+    real_ticks_missing_minutes: missing ? Number(missing[1]) : 0,
+    minute_bars_with_missing_tick_detail: missing ? number(missing[2]) : null,
+    real_ticks_missing_days: missingDays ? Number(missingDays[1]) : 0,
   };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (!process.argv[2]) throw new Error('Usage: npm run import:backtest -- "path/to/report.html"');
+  if (!process.argv[2]) throw new Error('Usage: npm run import:backtest -- "path/to/report.html" ["path/to/tester.log"]');
   const bytes = await readFile(process.argv[2]);
   const html = bytes.toString(bytes[0] === 255 && bytes[1] === 254 ? 'utf16le' : 'utf8');
   const data = parseReport(html);
+  if (process.argv[3]) {
+    const logBytes = await readFile(process.argv[3]);
+    const testerLog = logBytes.toString(logBytes[0] === 255 && logBytes[1] === 254 ? 'utf16le' : 'utf8');
+    data.tester_log = parseTesterLog(testerLog, data.report);
+  }
   // Import only the supplementary charts belonging to this report. Never reuse
   // charts from an older test when a new HTML report arrives without its PNGs.
   const reportPath = path.resolve(process.argv[2]);
