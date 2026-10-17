@@ -400,7 +400,7 @@ test('all portal inline scripts parse and the 7 member menus plus 7 admin menus 
   assert.match(admin,/data-email-pending-badge/);assert.match(admin,/memberPage\*50/);assert.match(admin,/\b50 per halaman\b/);
   const adminUi=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8');
   assert.match(adminUi,/window\.helixPendingEmailCount=requests\.length/);
-  assert.match(adminUi,/if\(emailQueueIntro\)emailQueueIntro\.textContent=/,'email-queue copy is assigned once per render without changing surrounding markup');
+  assert.match(adminUi,/emailQueueIntro&&emailQueueIntro\.textContent!==emailQueueCopy/,'email-queue copy avoids repeatedly mutating and stalling MutationObserver');
   assert.match(admin,/Performance per akun MT5/);assert.doesNotMatch(admin,/data-account-performance-detail|Lihat detail|Trading Performance Member/);assert.match(admin,/License & Akun/);assert.match(admin,/function performancePage\(\)[\s\S]*?accountPerformancePanel\(\)/);
   assert.match(memberR1,/Performance per akun MT5/);assert.match(memberR1,/member\/performance\/accounts/);
 });
