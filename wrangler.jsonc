@@ -7,7 +7,7 @@
     "production": {
       "vars": {
         "PORTAL_LICENSE_MANAGEMENT_ENABLED": "true",
-        "PORTAL_EMAIL_CHANGE_ENABLED": "false",
+        "PORTAL_EMAIL_CHANGE_ENABLED": "true",
         "PORTAL_OTP_ENABLED": "false",
         "PORTAL_OTP_CANARY_ENABLED": "true",
         "PORTAL_PERFORMANCE_ENABLED": "false",
