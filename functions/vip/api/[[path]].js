@@ -6,6 +6,61 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
 });
 
+const CONTENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ANNOUNCEMENT_KINDS = new Set(["update", "maintenance", "information", "general"]);
+const MATERIAL_KINDS = new Set(["video", "guide", "file", "strategy"]);
+function oneCalendarMonthAgo() {
+  const now = new Date();
+  const year = now.getUTCFullYear(), month = now.getUTCMonth() - 1, day = now.getUTCDate();
+  const cutoffMonth = new Date(Date.UTC(year, month, 1, now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds()));
+  const lastDay = new Date(Date.UTC(cutoffMonth.getUTCFullYear(), cutoffMonth.getUTCMonth() + 1, 0)).getUTCDate();
+  cutoffMonth.setUTCDate(Math.min(day, lastDay));
+  return cutoffMonth.toISOString();
+}
+export function contentText(value, max, label, required = false) {
+  const result = String(value ?? "").trim();
+  if ((required && !result) || result.length > max) throw Object.assign(new Error(`${label} wajib diisi dan maksimal ${max} karakter.`), { status: 400 });
+  return result;
+}
+export function secureExternalUrl(value) {
+  if (!value) return null;
+  let url;
+  try { url = new URL(String(value)); } catch { throw Object.assign(new Error("URL material tidak valid."), { status: 400 }); }
+  if (url.protocol !== "https:" || url.username || url.password) throw Object.assign(new Error("URL material harus HTTPS dan tidak boleh menyimpan kredensial."), { status: 400 });
+  return url.href;
+}
+export async function validateMaterialFile(file) {
+  if (!file || typeof file.arrayBuffer !== "function") throw Object.assign(new Error("File tidak valid."), { status: 400 });
+  if (file.size > 50 * 1024 * 1024) throw Object.assign(new Error("Ukuran file maksimum 50 MB."), { status: 400 });
+  const extension = String(file.name || "").split(".").pop()?.toLowerCase() || "";
+  const mime = String(file.type || "application/octet-stream").toLowerCase();
+  const mimeTypes = {
+    pdf: ["application/pdf", "application/octet-stream"], mp4: ["video/mp4", "application/octet-stream"],
+    zip: ["application/zip", "application/x-zip-compressed", "application/octet-stream"],
+    ex5: ["application/octet-stream"], png: ["image/png"], jpg: ["image/jpeg"], jpeg: ["image/jpeg"],
+    webp: ["image/webp"], txt: ["text/plain", "application/octet-stream"], mq5: ["text/plain", "application/octet-stream"],
+  };
+  if (!mimeTypes[extension] || !mimeTypes[extension].includes(mime)) throw Object.assign(new Error("Jenis file atau MIME tidak didukung."), { status: 400 });
+  const prefix = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const ascii = bytes => String.fromCharCode(...bytes);
+  const valid = {
+    pdf: () => ascii(prefix.slice(0, 5)) === "%PDF-",
+    mp4: () => ascii(prefix.slice(4, 8)) === "ftyp",
+    zip: () => prefix[0] === 0x50 && prefix[1] === 0x4b && [0x03, 0x05, 0x07].includes(prefix[2]),
+    png: () => [137,80,78,71,13,10,26,10].every((v,i) => prefix[i] === v),
+    jpg: () => prefix[0] === 0xff && prefix[1] === 0xd8 && prefix[2] === 0xff,
+    jpeg: () => prefix[0] === 0xff && prefix[1] === 0xd8 && prefix[2] === 0xff,
+    webp: () => ascii(prefix.slice(0, 4)) === "RIFF" && ascii(prefix.slice(8, 12)) === "WEBP",
+  }[extension];
+  if (valid && !valid()) throw Object.assign(new Error("Isi file tidak cocok dengan ekstensi yang dipilih."), { status: 400 });
+  if (["txt", "mq5"].includes(extension)) {
+    try { new TextDecoder("utf-8", { fatal: true }).decode(await file.slice(0, Math.min(file.size, 4096)).arrayBuffer()); }
+    catch { throw Object.assign(new Error("File teks harus menggunakan UTF-8 yang valid."), { status: 400 }); }
+    if (prefix.includes(0)) throw Object.assign(new Error("File teks tidak boleh memuat byte null."), { status: 400 });
+  }
+  return extension;
+}
+
 async function supabase(env, path, { method = "GET", body, token } = {}) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error("Cloudflare Pages secret SUPABASE_SERVICE_ROLE_KEY is not configured.");
@@ -197,6 +252,7 @@ export async function onRequest({ request, env }) {
     const emailRoute = pathname.startsWith("member/email-change-requests") || pathname.startsWith("admin/email-change-requests");
     const otpRoute = pathname.startsWith("member/pairings/");
     const performanceRoute = pathname === "member/performance" || pathname === "member/performance/accounts";
+    const contentAdminRoute = pathname === "admin/announcements" || pathname.startsWith("admin/announcements/") || pathname === "admin/materials" || pathname.startsWith("admin/materials/");
     if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
     if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
     if (otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
@@ -204,15 +260,24 @@ export async function onRequest({ request, env }) {
     const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
     const performanceCanary = env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
     if (performanceRoute && !performanceGlobal && !performanceCanary) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
-    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname.startsWith("member/performance") || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests") || pathname.startsWith("admin/settings");
+    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname.startsWith("member/performance") || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests") || pathname.startsWith("admin/settings") || contentAdminRoute;
     const earlySession = earlyAuthRoute ? await verifiedUser(request, env, pathname.startsWith("admin/")) : null;
     if (earlySession?.error) return earlySession.error;
+    if (contentAdminRoute && method !== "GET") {
+      await rateLimit(request, env, "admin_content_write", earlySession.user.id, 40, 60);
+      const length = Number(request.headers.get("content-length") || 0);
+      if (length > 55 * 1024 * 1024) return response({ error: "Ukuran permintaan melebihi batas 55 MB." }, 413);
+    }
     const isMultipart = request.headers.get("content-type")?.includes("multipart/form-data");
     const form = isMultipart ? await request.formData() : null;
     let json = {};
     if (method !== "GET" && method !== "DELETE") {
-      if (earlyAuthRoute) json = await readBoundedJson(request, 8_192);
-      else json = form ? Object.fromEntries([...form.entries()].filter(([key]) => key !== "file")) : await request.json();
+      if (form) {
+        json = Object.fromEntries([...form.entries()].filter(([key]) => key !== "file"));
+        if (form.has("published")) json.published = ["true", "on", "1"].includes(String(form.get("published")).toLowerCase());
+      }
+      else if (earlyAuthRoute) json = await readBoundedJson(request, contentAdminRoute ? 32_768 : 8_192);
+      else json = await readBoundedJson(request, 32_768);
     }
 
     if (pathname === "member" && method === "GET") {
@@ -229,7 +294,8 @@ export async function onRequest({ request, env }) {
       }
       const licenseIds = licenses.map(x => x.id);
       const releaseAckV18k = env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true";
-      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&${releaseAckV18k ? "" : "released_at=is.null&"}select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at${releaseAckV18k ? ",released_at,release_state,release_request_id,release_requested_at" : ""}`) : [];
+      const retentionFilter = releaseAckV18k ? `or=(released_at.is.null,released_at.gte.${encodeURIComponent(oneCalendarMonthAgo())})&` : "released_at=is.null&";
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&${retentionFilter}select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at${releaseAckV18k ? ",released_at,release_state,release_request_id,release_requested_at" : ""}`) : [];
       if (releaseAckV18k) {
         const offlineBefore = Date.now() - 30 * 60_000;
         for (const binding of bindings) {
@@ -474,10 +540,12 @@ export async function onRequest({ request, env }) {
     if (pathname === "admin" && method === "GET") {
       const session = await requireUser(request, env, true);
       if (session.error) return session.error;
+      const releaseAckV18k = env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true";
+      const retentionFilter = releaseAckV18k ? `or=(released_at.is.null,released_at.gte.${encodeURIComponent(oneCalendarMonthAgo())})&` : "";
       const [members, licenses, bindings, events, announcements, materials, authUsers] = await Promise.all([
         supabase(env, "helix_members?select=id,email,display_name,role,created_at&order=created_at.desc"),
         listLicenses(env),
-        supabase(env, `helix_license_bindings?select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at${env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true" ? ",release_state,release_request_id,release_requested_at" : ""}&order=first_seen_at.desc`),
+        supabase(env, `helix_license_bindings?${retentionFilter}select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at${releaseAckV18k ? ",release_state,release_request_id,release_requested_at" : ""}&order=first_seen_at.desc`),
         supabase(env, "helix_license_events?select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100"),
         supabase(env, "helix_announcements?select=id,title,body,kind,published,published_at,created_at&order=created_at.desc"),
         supabase(env, "helix_materials?select=id,title,description,kind,storage_path,published,created_at&order=created_at.desc"),
@@ -839,33 +907,48 @@ export async function onRequest({ request, env }) {
     }
 
     if (pathname === "admin/announcements" && method === "POST") {
-      const row = { title: String(json.title || "").trim(), body: String(json.body || "").trim(), kind: json.kind || "update", published: Boolean(json.published), published_at: json.published ? new Date().toISOString() : null, created_by: session.user.id };
-      if (!row.title || !row.body) return response({ error: "Judul dan isi pengumuman wajib diisi." }, 400);
+      const kind = String(json.kind || "update");
+      if (!ANNOUNCEMENT_KINDS.has(kind)) return response({ error: "Kategori announcement tidak valid." }, 400);
+      const row = { title: contentText(json.title, 180, "Judul", true), body: contentText(json.body, 20000, "Isi pengumuman", true), kind, published: Boolean(json.published), published_at: json.published ? new Date().toISOString() : null, created_by: session.user.id };
       const created = await supabase(env, "helix_announcements?select=*", { method: "POST", body: row });
       return response({ ok: true, item: created[0] }, 201);
     }
 
     if (pathname.startsWith("admin/announcements/") && method === "DELETE") {
       const id = pathname.split("/").at(-1);
+      if (!CONTENT_ID.test(id)) return response({ error: "ID announcement tidak valid." }, 400);
       await supabase(env, `helix_announcements?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
       return response({ ok: true });
     }
 
     if (pathname.startsWith("admin/announcements/") && method === "PATCH") {
       const id = pathname.split("/").at(-1);
-      const published = Boolean(json.published);
-      const updated = await supabase(env, `helix_announcements?id=eq.${encodeURIComponent(id)}&select=id,published,published_at`, { method: "PATCH", body: { published, published_at: published ? new Date().toISOString() : null } });
+      if (!CONTENT_ID.test(id)) return response({ error: "ID announcement tidak valid." }, 400);
+      const existing = await supabase(env, `helix_announcements?id=eq.${encodeURIComponent(id)}&select=id,published,published_at`);
+      if (!existing.length) return response({ error: "Announcement tidak ditemukan." }, 404);
+      const patch = {};
+      if (Object.hasOwn(json, "title")) patch.title = contentText(json.title, 180, "Judul", true);
+      if (Object.hasOwn(json, "body")) patch.body = contentText(json.body, 20000, "Isi pengumuman", true);
+      if (Object.hasOwn(json, "kind")) {
+        if (!ANNOUNCEMENT_KINDS.has(String(json.kind))) return response({ error: "Kategori announcement tidak valid." }, 400);
+        patch.kind = String(json.kind);
+      }
+      if (Object.hasOwn(json, "published")) {
+        patch.published = Boolean(json.published);
+        patch.published_at = patch.published ? (existing[0].published ? existing[0].published_at || new Date().toISOString() : new Date().toISOString()) : null;
+      }
+      if (!Object.keys(patch).length) return response({ error: "Tidak ada perubahan yang dikirim." }, 400);
+      const updated = await supabase(env, `helix_announcements?id=eq.${encodeURIComponent(id)}&select=*`, { method: "PATCH", body: patch });
       return response({ ok: true, item: updated?.[0] });
     }
 
     if (pathname === "admin/materials" && method === "POST") {
-      const row = { title: String(json.title || "").trim(), description: String(json.description || "").trim(), kind: json.kind || "guide", storage_path: json.storage_path || null, published: Boolean(json.published), created_by: session.user.id };
-      if (!row.title) return response({ error: "Nama material wajib diisi." }, 400);
+      const kind = String(json.kind || "guide");
+      if (!MATERIAL_KINDS.has(kind)) return response({ error: "Kategori material tidak valid." }, 400);
+      const row = { title: contentText(json.title, 180, "Nama material", true), description: contentText(json.description, 5000, "Deskripsi"), kind, storage_path: secureExternalUrl(json.storage_path), published: Boolean(json.published), created_by: session.user.id };
       const file = form?.get("file");
       if (file && typeof file.arrayBuffer === "function" && file.size > 0) {
-        if (file.size > 50 * 1024 * 1024) return response({ error: "Ukuran file maksimum 50 MB." }, 400);
-        const extension = file.name.split(".").pop()?.toLowerCase() || "";
-        if (!/^(pdf|mp4|zip|ex5|png|jpe?g|webp|txt|mq5)$/.test(extension)) return response({ error: "Jenis file yang didukung: PDF, MP4, ZIP, EX5, PNG, JPG, WEBP, TXT, MQ5." }, 400);
+        const extension = await validateMaterialFile(file);
         const bucket = "helix-vip-materials";
         try { await storageRequest(env, `bucket/${bucket}`); }
         catch { await storageRequest(env, "bucket", { method: "POST", body: JSON.stringify({ id: bucket, name: bucket, public: false, file_size_limit: 52428800, allowed_mime_types: ["application/pdf", "video/mp4", "application/zip", "application/x-zip-compressed", "application/octet-stream", "image/png", "image/jpeg", "image/webp", "text/plain"] }) }); }
@@ -874,19 +957,13 @@ export async function onRequest({ request, env }) {
         await storageRequest(env, `object/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: file, contentType: file.type || "application/octet-stream" });
         row.storage_path = `${bucket}:${objectPath}`;
       }
-      if (row.storage_path) {
-        if (!row.storage_path.startsWith("helix-vip-materials:")) {
-          let link;
-          try { link = new URL(row.storage_path); } catch { return response({ error: "URL material tidak valid." }, 400); }
-          if (link.protocol !== "https:") return response({ error: "URL material harus menggunakan HTTPS." }, 400);
-        }
-      }
       const created = await supabase(env, "helix_materials?select=*", { method: "POST", body: row });
       return response({ ok: true, item: created[0] }, 201);
     }
 
     if (pathname.startsWith("admin/materials/") && method === "DELETE") {
       const id = pathname.split("/").at(-1);
+      if (!CONTENT_ID.test(id)) return response({ error: "ID material tidak valid." }, 400);
       const material = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=storage_path`);
       if (material[0]?.storage_path?.startsWith("helix-vip-materials:")) {
         const objectPath = material[0].storage_path.split(":").slice(1).join(":");
@@ -900,13 +977,14 @@ export async function onRequest({ request, env }) {
       const memberSession = await requireUser(request, env);
       if (memberSession.error) return memberSession.error;
       const id = pathname.split("/").at(-1);
+      if (!CONTENT_ID.test(id)) return response({ error: "ID material tidak valid." }, 400);
       const rows = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&published=eq.true&select=storage_path,title`);
       if (!rows.length || !rows[0].storage_path) return response({ error: "File material tidak ditemukan." }, 404);
       const storage = rows[0].storage_path;
       if (!storage.startsWith("helix-vip-materials:")) {
         let external;
         try { external = new URL(storage); } catch { return response({ error: "URL file tidak valid." }, 400); }
-        if (external.protocol !== "https:") return response({ error: "URL file tidak aman." }, 400);
+        if (external.protocol !== "https:" || external.username || external.password) return response({ error: "URL file tidak aman." }, 400);
         return response({ url: external.href });
       }
       const [, objectPath] = storage.split(":", 2);
@@ -919,13 +997,41 @@ export async function onRequest({ request, env }) {
 
     if (pathname.startsWith("admin/materials/") && method === "PATCH") {
       const id = pathname.split("/").at(-1);
-      const updated = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=id,published`, { method: "PATCH", body: { published: Boolean(json.published) } });
-      return response({ ok: true, item: updated?.[0] });
+      if (!CONTENT_ID.test(id)) return response({ error: "ID material tidak valid." }, 400);
+      const existing = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=id,storage_path`);
+      if (!existing.length) return response({ error: "Material tidak ditemukan." }, 404);
+      const patch = {};
+      if (Object.hasOwn(json, "title")) patch.title = contentText(json.title, 180, "Nama material", true);
+      if (Object.hasOwn(json, "description")) patch.description = contentText(json.description, 5000, "Deskripsi");
+      if (Object.hasOwn(json, "kind")) {
+        if (!MATERIAL_KINDS.has(String(json.kind))) return response({ error: "Kategori material tidak valid." }, 400);
+        patch.kind = String(json.kind);
+      }
+      if (Object.hasOwn(json, "published")) patch.published = Boolean(json.published);
+      if (Object.hasOwn(json, "storage_path") && String(json.storage_path || "").trim()) patch.storage_path = secureExternalUrl(json.storage_path);
+      const file = form?.get("file");
+      if (file && typeof file.arrayBuffer === "function" && file.size > 0) {
+        const extension = await validateMaterialFile(file);
+        const bucket = "helix-vip-materials";
+        const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90) || `material.${extension}`;
+        const objectPath = `${crypto.randomUUID()}/${filename}`;
+        await storageRequest(env, `object/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: file, contentType: file.type || "application/octet-stream" });
+        patch.storage_path = `${bucket}:${objectPath}`;
+      }
+      if (!Object.keys(patch).length) return response({ error: "Tidak ada perubahan yang dikirim." }, 400);
+      const updated = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=*`, { method: "PATCH", body: patch });
+      if (!updated?.length) return response({ error: "Material tidak ditemukan." }, 404);
+      const oldPath = existing[0].storage_path;
+      if (patch.storage_path && oldPath?.startsWith("helix-vip-materials:") && patch.storage_path !== oldPath) {
+        await storageRequest(env, "object/helix-vip-materials", { method: "DELETE", body: JSON.stringify({ prefixes: [oldPath.split(":").slice(1).join(":")] }) });
+      }
+      return response({ ok: true, item: updated[0] });
     }
 
     return response({ error: "Endpoint tidak ditemukan." }, 404);
   } catch (error) {
     if (error?.status === 429) return response({ error: "RATE_LIMITED", retry_after_seconds: error.retryAfter || 60 }, 429);
+    if (error?.status === 400 || error?.status === 413) return response({ error: error.message }, error.status);
     return response({ error: "Permintaan belum berhasil diproses. Periksa konfigurasi HELIX TEAM/Pages Functions lalu coba lagi." }, error?.status === 503 ? 503 : 500);
   }
 }
