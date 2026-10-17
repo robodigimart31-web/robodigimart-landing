@@ -387,14 +387,16 @@ test('pair poll and telemetry reject missing session proof before database acces
   assert.equal(calls,0);
 });
 
-test('all portal inline scripts parse and the existing 7 member menus plus 6 admin menus remain', async () => {
+test('all portal inline scripts parse and the 7 member menus plus 7 admin menus remain', async () => {
   for (const path of ['public/vip/index.html','public/vip/admin/index.html','public/vip/login.html','public/vip/login/index.html']) {
     const html=await readFile(path,'utf8');let count=0;
     for (const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) if (match[1].trim()) new vm.Script(match[1],{filename:path+':inline'+(++count)});
   }
   const member=await readFile('public/vip/index.html','utf8'),memberR1=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8'),admin=await readFile('public/vip/admin/index.html','utf8');
   assert.equal((member.match(/\['(?:dashboard|licenses|accounts|activity|announcements|materials|profile)'/g)||[]).length,7);
-  assert.equal((admin.match(/\['(?:Dashboard|Member|Performance|License & Akun|Announcement|Material)'/g)||[]).length,6);
+  assert.equal((admin.match(/\['(?:Dashboard|Member|Performance|License & Akun|Announcement|Material|Permintaan Email)'/g)||[]).length,7);
+  assert.match(admin,/\['Permintaan Email','mail'\].*\['General Settings','settings'\]/);
+  assert.match(admin,/data-email-pending-badge/);assert.match(admin,/memberPage\*50/);assert.match(admin,/\b50 per halaman\b/);
   assert.match(admin,/Performance per akun MT5/);assert.doesNotMatch(admin,/data-account-performance-detail|Lihat detail|Trading Performance Member/);assert.match(admin,/License & Akun/);assert.match(admin,/function performancePage\(\)[\s\S]*?accountPerformancePanel\(\)/);
   assert.match(memberR1,/Performance per akun MT5/);assert.match(memberR1,/member\/performance\/accounts/);
 });
