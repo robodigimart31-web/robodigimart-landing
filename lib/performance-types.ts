@@ -31,6 +31,17 @@ export interface PerformanceDataset {
   chart_basis?: string;
   timeframe?: string;
   history_quality?: string;
+  details?: Record<string, string>;
+  tester_log?: {
+    expert_file: string;
+    final_balance: number;
+    currency: string;
+    ticks: number;
+    bars: number;
+    real_ticks_missing_minutes: number;
+    minute_bars_with_missing_tick_detail: number | null;
+    real_ticks_missing_days: number;
+  };
   report: PerformanceReport;
   points: PerformancePoint[];
 }
