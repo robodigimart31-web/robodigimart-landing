@@ -71,5 +71,40 @@
     if(member&&button.dataset.releaseBinding){e.preventDefault();e.stopImmediatePropagation();const reason=await window.HelixUI.prompt({title:'Lepas akun MT5',message:'Slot license akan tersedia kembali dan sesi terminal terkait dicabut.',label:'Alasan melepas akun',type:'text',minLength:3,maxLength:300});if(!reason)return;if(!(await window.HelixUI.confirm({title:'Konfirmasi pelepasan akun',message:'Akun ini akan dilepas dari license.',confirmText:'Lepas akun',danger:true})))return;try{await sessionRequest(`member/bindings/${button.dataset.releaseBinding}`,'POST',{action:'release',reason});toast('Slot akun dilepas dan sesi terminal dicabut.');if(typeof window.load==='function')await window.load()}catch(err){toast(err.message,true)}return}
   },true);
   document.addEventListener('submit',e=>{if(e.target.matches('[data-r1-email-form]')){e.preventDefault();}},true);
-  const observer=new MutationObserver(patchRendered);observer.observe(document.body,{childList:true,subtree:true});document.addEventListener('DOMContentLoaded',patchRendered);setTimeout(patchRendered,700);setTimeout(patchRendered,1800);
+  // Manual email-change flow: keep the legacy handlers intact, but intercept the
+  // member request before the old verification-based handler runs.
+  document.addEventListener('click',async e=>{
+    const button=e.target.closest('button[data-change-email]');
+    if(!button||!member||!features.email_change)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    const values=await window.HelixUI.modal({title:'Minta ganti email',message:'Setelah permintaan diproses, semua akses, license, dan koneksi yang terhubung dengan email lama akan dinonaktifkan. Anda akan mendapatkan akses portal dan license baru melalui email baru. Hubungi admin melalui chat setelah mengirim permintaan.',confirmText:'Lanjutkan',fields:[
+      {name:'old_email',label:'Email lama',type:'email',value:member.email,required:true,maxLength:254},
+      {name:'new_email',label:'Email baru',type:'email',required:true,maxLength:254},
+      {name:'password',label:'Password portal VIP',type:'password',required:true,maxLength:200}
+    ]});
+    if(!values)return;
+    if(!(await window.HelixUI.confirm({title:'Konfirmasi perubahan email',message:'Dengan melanjutkan, Anda memahami bahwa akses, license, dan koneksi email lama akan dinonaktifkan setelah admin memproses permintaan.',confirmText:'Kirim permintaan'})))return;
+    try{await sessionRequest('member/email-change-requests','POST',values);toast('Permintaan dikirim. Silakan hubungi admin melalui chat untuk melanjutkan proses.');}
+    catch(err){toast(err.message,true)}
+  },true);
+  function normalizeEmailQueue(){
+    document.querySelectorAll('[data-r1-email-approve]').forEach(button=>{
+      button.dataset.r1EmailComplete=button.dataset.r1EmailApprove;
+      delete button.dataset.r1EmailApprove;
+      button.textContent='Selesai';
+      button.title='Tandai selesai setelah akun lama dinonaktifkan dan invitation email baru berhasil dikirim.';
+    });
+    document.querySelectorAll('[data-r1-email-queue] .panel-sub').forEach(node=>{
+      if(/verifikasi alamat baru/i.test(node.textContent))node.textContent='Admin menonaktifkan email lama, mengirim invitation ke email baru, lalu menekan Selesai.';
+    });
+  }
+  document.addEventListener('click',async e=>{
+    const button=e.target.closest('button[data-r1-email-complete]');
+    if(!button)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    if(!(await window.HelixUI.confirm({title:'Selesaikan request email?',message:'Pastikan email lama sudah dinonaktifkan dan invitation sudah berhasil dikirim ke email baru.',confirmText:'Selesaikan'})))return;
+    try{await sessionRequest(`admin/email-change-requests/${button.dataset.r1EmailComplete}`,'POST',{action:'complete'});toast('Request perubahan email selesai.');await loadQueue(button.closest('[data-r1-email-queue]'));normalizeEmailQueue();}
+    catch(err){toast(err.message,true)}
+  },true);
+  const observer=new MutationObserver(()=>{patchRendered();normalizeEmailQueue()});observer.observe(document.body,{childList:true,subtree:true});document.addEventListener('DOMContentLoaded',()=>{patchRendered();normalizeEmailQueue()});setTimeout(()=>{patchRendered();normalizeEmailQueue()},700);setTimeout(()=>{patchRendered();normalizeEmailQueue()},1800);
 })();
