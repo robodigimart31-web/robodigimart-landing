@@ -17,13 +17,16 @@ export async function onRequestPost({ request, env }) {
     const product = String(input.ea_product_id || "");
     const version = String(input.ea_version || "");
     const magicBase = input.magic_base;
-    if (broker.length < 2 || broker.length > 120 || /[\u0000-\u001f\u007f]/.test(broker) || !/^[0-9]{3,18}$/.test(login) || !["real", "demo"].includes(mode) || protocol !== "v2" || !/^[A-Za-z0-9._-]{1,48}$/.test(build) || !/^[a-z][a-z0-9_]{1,47}$/.test(product) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(version) || (magicBase !== undefined && (!Number.isSafeInteger(magicBase) || magicBase < 1 || magicBase > Number.MAX_SAFE_INTEGER - 47))) return json({ error: "INVALID_REQUEST" }, 400, headers);
+    if (broker.length < 2 || broker.length > 120 || /[\u0000-\u001f\u007f]/.test(broker) || !/^[0-9]{3,18}$/.test(login) || !["real", "demo"].includes(mode) || protocol !== "v2" || !/^[A-Za-z0-9._-]{1,48}$/.test(build) || !/^[a-z][a-z0-9_]{1,47}$/.test(product) || !/^\d{1,6}(?:\.\d{1,6}){1,3}[a-z]?$/i.test(version) || (magicBase !== undefined && (!Number.isSafeInteger(magicBase) || magicBase < 1 || magicBase > Number.MAX_SAFE_INTEGER - 47))) return json({ error: "INVALID_REQUEST" }, 400, headers);
     const normalizedServer = broker.toLocaleLowerCase("en-US");
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 100_000_000).padStart(8, "0");
     const sessionSecret = randomToken(32);
     const codeHash = await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET);
     const sessionHash = await sha256(sessionSecret);
     const fingerprint = await sha256(`${normalizedServer}:${login}`);
+    // This public EA endpoint has no authenticated member identity. Keep the
+    // legacy SHA-256 pairing protocol unchanged; canonical HMAC must be computed
+    // only inside the authenticated approval path, never accepted at public start.
     const created = await rpc(env, "helix_pairing_start", {
       p_code_hash: codeHash,
       p_session_hash: sessionHash,

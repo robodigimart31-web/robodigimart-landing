@@ -34,6 +34,7 @@ test('pair start returns a short code and independent secret while persisting on
   assert.notEqual(inserted.p_code_hash,output.pairing_code);
   assert.equal(JSON.stringify(inserted).includes(output.session_secret),false);
   assert.equal(JSON.stringify(inserted).includes(output.pairing_code),false);
+  assert.equal(Object.hasOwn(inserted,'p_registry_fingerprint'),false,'public EA pairing start must not mint/attach a member-owned HMAC registry identity');
 });
 
 test('pair start enforces atomic rate limit response', async t => {
@@ -397,6 +398,9 @@ test('all portal inline scripts parse and the 7 member menus plus 7 admin menus 
   assert.equal((admin.match(/\['(?:Dashboard|Member|Performance|License & Akun|Announcement|Material|Permintaan Email)'/g)||[]).length,7);
   assert.match(admin,/\['Permintaan Email','mail'\].*\['General Settings','settings'\]/);
   assert.match(admin,/data-email-pending-badge/);assert.match(admin,/memberPage\*50/);assert.match(admin,/\b50 per halaman\b/);
+  const adminUi=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8');
+  assert.match(adminUi,/window\.helixPendingEmailCount=requests\.length/);
+  assert.match(adminUi,/if\(emailQueueIntro\)emailQueueIntro\.textContent=/,'email-queue copy is assigned once per render without changing surrounding markup');
   assert.match(admin,/Performance per akun MT5/);assert.doesNotMatch(admin,/data-account-performance-detail|Lihat detail|Trading Performance Member/);assert.match(admin,/License & Akun/);assert.match(admin,/function performancePage\(\)[\s\S]*?accountPerformancePanel\(\)/);
   assert.match(memberR1,/Performance per akun MT5/);assert.match(memberR1,/member\/performance\/accounts/);
 });

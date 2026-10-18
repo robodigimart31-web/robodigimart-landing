@@ -9,6 +9,27 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
 const CONTENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ANNOUNCEMENT_KINDS = new Set(["update", "maintenance", "information", "general"]);
 const MATERIAL_KINDS = new Set(["video", "guide", "file", "strategy"]);
+const PRODUCT_VERSION = /^(\d{1,6}(?:\.\d{1,6}){1,3})([a-z]?)$/i;
+export function compareProductVersion(left, right) {
+  const parse = value => {
+    const match = PRODUCT_VERSION.exec(String(value ?? ""));
+    return match ? { parts: match[1].split(".").map(Number), suffix: match[2].toLowerCase() } : null;
+  };
+  const a = parse(left), b = parse(right);
+  if (!a || !b) return null;
+  for (let i = 0; i < Math.max(a.parts.length, b.parts.length); i++) {
+    const delta = (a.parts[i] || 0) - (b.parts[i] || 0);
+    if (delta) return Math.sign(delta);
+  }
+  const suffixRank = suffix => suffix ? suffix.charCodeAt(0) - 96 : 27;
+  return Math.sign(suffixRank(a.suffix) - suffixRank(b.suffix));
+}
+function validVersionRange(minimum, maximum) {
+  if (minimum && compareProductVersion(minimum, minimum) === null) return false;
+  if (maximum && compareProductVersion(maximum, maximum) === null) return false;
+  if (minimum && maximum && compareProductVersion(minimum, maximum) > 0) return false;
+  return true;
+}
 function oneCalendarMonthAgo() {
   const now = new Date();
   const year = now.getUTCFullYear(), month = now.getUTCMonth() - 1, day = now.getUTCDate();
@@ -109,6 +130,69 @@ async function listLicenses(env, filter = "") {
   }
 }
 
+async function productAccessSnapshot(env, licenses) {
+  let products;
+  try { products = await supabase(env, "helix_ea_products?select=ea_product_id,display_name,description,enabled,catalog_status,all_access_eligible,min_version,max_version&order=display_name.asc"); }
+  catch { products = (await supabase(env, "helix_ea_products?select=ea_product_id,display_name,enabled,min_version,max_version&order=display_name.asc")).map(product => ({ ...product, description: "", catalog_status: product.enabled ? "published" : "disabled", all_access_eligible: false })); }
+  const licenseIds = licenses.map(license => license.id);
+  const policies = licenseIds.length
+    ? await supabase(env, `helix_license_product_policies?license_id=in.(${licenseIds.join(",")})&select=license_id,license_scope,allowed_products`)
+    : [];
+  const policyByLicense = new Map(policies.map(policy => [policy.license_id, policy]));
+  const now = Date.now();
+  const access = products.map(product => {
+    const grants = licenses.filter(license => {
+      const policy = policyByLicense.get(license.id);
+      return policy?.license_scope === "helix_suite"
+        ? product.all_access_eligible === true
+        : policy?.license_scope === "product" && (policy.allowed_products || []).includes(product.ea_product_id);
+    });
+    const active = grants.some(license => license.status === "active" && !license.deleted_at && (!license.expires_at || Date.parse(license.expires_at) > now));
+    const expired = !active && grants.some(license => license.status === "expired" || (license.expires_at && Date.parse(license.expires_at) <= now));
+    const published = product.enabled && product.catalog_status === "published";
+    return { ...product, access_status: active && published ? "OWNED" : expired ? "EXPIRED" : "LOCKED", eligible_license_ids: grants.map(license => license.id) };
+  });
+  return { products: access, ownedProductIds: new Set(access.filter(product => product.access_status === "OWNED").map(product => product.ea_product_id)) };
+}
+
+async function memberSlotSnapshot(env, memberId) {
+  const [accounts, setting] = await Promise.all([
+    supabase(env, `helix_member_mt5_accounts?member_id=eq.${encodeURIComponent(memberId)}&select=id,broker_server,account_login,mode,status,created_at,released_at&order=created_at.desc`),
+    supabase(env, "helix_general_settings?setting_key=eq.mt5_member_slot_max&select=setting_value&limit=1"),
+  ]);
+  const used = accounts.filter(account => ["active", "pending_release", "suspended", "quarantined", "unreconciled"].includes(account.status)).length;
+  const capacity = Number(setting[0]?.setting_value);
+  if (!Number.isInteger(capacity) || capacity < 5 || capacity % 5 !== 0) throw Object.assign(new Error("MEMBER_SLOT_MAX_SETTING_INVALID"), { status: 503 });
+  return { used, total: capacity, accounts, configured_max: capacity };
+}
+
+async function attachProductSessions(env, bindings) {
+  const rows = [];
+  for (let offset = 0; offset < bindings.length; offset += 100) {
+    const ids = bindings.slice(offset, offset + 100).map(binding => binding.id);
+    if (!ids.length) continue;
+    rows.push(...await supabase(env, `helix_license_sessions?binding_id=in.(${ids.join(",")})&select=binding_id,ea_product_id,ea_version,revoked_at,magic_base&limit=5000`));
+  }
+  const byBinding = new Map();
+  for (const session of rows) {
+    const sessions = byBinding.get(session.binding_id) || [];
+    sessions.push(session);
+    byBinding.set(session.binding_id, sessions);
+  }
+  for (const binding of bindings) binding.product_sessions = byBinding.get(binding.id) || [];
+  return bindings;
+}
+
+async function registryFingerprint(env, normalizedServer, login) {
+  const key = env.MT5_ACCOUNT_HMAC_SECRET;
+  if (!key || new TextEncoder().encode(key).length < 32) throw Object.assign(new Error("MT5_ACCOUNT_HMAC_SECRET_NOT_CONFIGURED"), { status: 503 });
+  const cryptoKey = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const bytes = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(`helix:mt5-account:v1:${normalizedServer}:${login}`));
+  return [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function validProductId(value) { return /^[a-z][a-z0-9_]{1,47}$/.test(String(value || "")); }
+
 async function authUser(token, env) {
   if (!token) return null;
   const result = await fetch(`${env.SUPABASE_URL || DEFAULT_SUPABASE_URL}/auth/v1/user`, {
@@ -132,7 +216,8 @@ async function requireUser(request, env, admin = false) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const user = await authUser(token, env);
   if (!user?.id) return { error: response({ error: "Sesi login sudah berakhir. Silakan masuk kembali." }, 401) };
-  const rows = await supabase(env, `helix_members?id=eq.${encodeURIComponent(user.id)}&select=id,email,display_name,role`);
+  const memberFields = env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true" ? "id,email,display_name,role,mt5_slot_capacity" : "id,email,display_name,role";
+  const rows = await supabase(env, `helix_members?id=eq.${encodeURIComponent(user.id)}&select=${memberFields}`);
   const member = rows?.[0];
   if (!member) return { error: response({ error: "Profil member belum tersedia." }, 403) };
   let suspensions = [];
@@ -145,6 +230,11 @@ async function requireUser(request, env, admin = false) {
 
 async function digest(value) {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+
+async function digestBytes(value) {
+  const bytes = await crypto.subtle.digest("SHA-256", value);
   return [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, "0")).join("");
 }
 
@@ -248,11 +338,11 @@ export async function onRequest({ request, env }) {
     const url = new URL(request.url);
     const pathname = url.pathname.replace(/^\/vip\/api\/?/, "");
     const method = request.method;
-    const licenseRoute = pathname === "admin/licenses" || pathname.startsWith("admin/licenses/") || pathname.startsWith("member/bindings/");
+    const licenseRoute = pathname === "admin/licenses" || pathname.startsWith("admin/licenses/") || pathname.startsWith("member/bindings/") || pathname.startsWith("admin/members/") && pathname.endsWith("/slots") || pathname.startsWith("admin/mt5-accounts/");
     const emailRoute = pathname.startsWith("member/email-change-requests") || pathname.startsWith("admin/email-change-requests");
     const otpRoute = pathname.startsWith("member/pairings/");
     const performanceRoute = pathname === "member/performance" || pathname === "member/performance/accounts";
-    const contentAdminRoute = pathname === "admin/announcements" || pathname.startsWith("admin/announcements/") || pathname === "admin/materials" || pathname.startsWith("admin/materials/");
+    const contentAdminRoute = pathname === "admin/announcements" || pathname.startsWith("admin/announcements/") || pathname === "admin/materials" || pathname.startsWith("admin/materials/") || pathname === "admin/products" || pathname.startsWith("admin/products/");
     if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
     if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
     if (otpRoute && env.PORTAL_OTP_ENABLED !== "true" && env.PORTAL_OTP_CANARY_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "otp_pairing", message: "Pairing OTP belum diaktifkan untuk portal ini." }, 503);
@@ -284,18 +374,40 @@ export async function onRequest({ request, env }) {
       const session = await requireUser(request, env);
       if (session.error) return session.error;
       const id = encodeURIComponent(session.user.id);
+      const multiProductEnabled = env.PORTAL_MULTIPRODUCT_ENABLED === "true";
+      const universalSlotsEnabled = env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true";
+      const materialFields = multiProductEnabled ? "id,title,description,kind,storage_path,created_at,ea_product_id,file_version,file_checksum_sha256" : "id,title,description,kind,storage_path,created_at";
+      const announcementFields = multiProductEnabled ? "id,title,body,kind,published_at,created_at,ea_product_id" : "id,title,body,kind,published_at,created_at";
       const [licenses, announcements, materials] = await Promise.all([
         listLicenses(env, `member_id=eq.${id}&deleted_at=is.null`),
-        supabase(env, "helix_announcements?published=eq.true&select=id,title,body,kind,published_at,created_at&order=published_at.desc.nullslast"),
-        supabase(env, "helix_materials?published=eq.true&select=id,title,description,kind,storage_path,created_at&order=created_at.desc"),
+        supabase(env, `helix_announcements?published=eq.true&select=${announcementFields}&order=published_at.desc.nullslast`),
+        supabase(env, `helix_materials?published=eq.true&select=${materialFields}&order=created_at.desc`),
       ]);
       for (const license of licenses) {
         license.effective_status = license.status !== "active" ? license.status.toUpperCase() : license.expires_at && Date.parse(license.expires_at) <= Date.now() ? "EXPIRED" : license.activation_policy === "first_activation" && !license.first_activated_at ? "PENDING ACTIVATION" : "ACTIVE";
       }
+      let productCatalog = [], ownedProductIds = new Set();
+      if (multiProductEnabled) {
+        const snapshot = await productAccessSnapshot(env, licenses);
+        productCatalog = snapshot.products;
+        ownedProductIds = snapshot.ownedProductIds;
+      }
+      const visibleMaterials = multiProductEnabled
+        ? materials.filter(material => !material.ea_product_id || ownedProductIds.has(material.ea_product_id))
+        : materials;
+      const visibleAnnouncements = multiProductEnabled
+        ? announcements.filter(item => !item.ea_product_id || ownedProductIds.has(item.ea_product_id))
+        : announcements;
+      let slotPool = null, mt5Accounts = [];
+      if (universalSlotsEnabled) {
+        const snapshot = await memberSlotSnapshot(env, session.user.id);
+        mt5Accounts = snapshot.accounts;
+        slotPool = { used: snapshot.used, total: Number(session.member.mt5_slot_capacity || 0), configured_max: snapshot.configured_max, accounts: mt5Accounts };
+      }
       const licenseIds = licenses.map(x => x.id);
       const releaseAckV18k = env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true";
       const retentionFilter = releaseAckV18k ? `or=(released_at.is.null,released_at.gte.${encodeURIComponent(oneCalendarMonthAgo())})&` : "released_at=is.null&";
-      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&${retentionFilter}select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at${releaseAckV18k ? ",released_at,release_state,release_request_id,release_requested_at" : ""}`) : [];
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&${retentionFilter}select=id,license_id,broker_server,account_login,mode,last_sync_at,first_seen_at${releaseAckV18k ? ",released_at,release_state,release_request_id,release_requested_at" : ""}${universalSlotsEnabled ? ",member_mt5_account_id" : ""}`) : [];
       if (releaseAckV18k) {
         const offlineBefore = Date.now() - 30 * 60_000;
         for (const binding of bindings) {
@@ -304,10 +416,12 @@ export async function onRequest({ request, env }) {
           binding.terminal_status = binding.release_state === "released" ? "—" : binding.last_sync_at && Date.parse(binding.last_sync_at) >= offlineBefore ? "ONLINE" : "OFFLINE";
         }
       }
+      if (multiProductEnabled) await attachProductSessions(env, bindings);
+      if (universalSlotsEnabled) for (const account of mt5Accounts) account.bindings = bindings.filter(binding => binding.member_mt5_account_id === account.id);
       const events = licenseIds.length ? await supabase(env, `helix_license_events?license_id=in.(${licenseIds.join(",")})&select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100`) : [];
       let emailChangeRequests = [];
       try { emailChangeRequests = await supabase(env, `helix_email_change_requests?member_id=eq.${id}&select=id,old_email,new_email,status,member_note,admin_note,created_at,decided_at,verified_at,expires_at&order=created_at.desc&limit=20`); } catch { /* migration pending: keep existing member pages available */ }
-      return response({ member: session.member, licenses, bindings, events, announcements, materials, emailChangeRequests, release_ack_v18k: env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true" });
+      return response({ member: session.member, licenses, bindings, events, announcements: visibleAnnouncements, materials: visibleMaterials, products: productCatalog, slot_pool: slotPool, universal_slots_enabled: universalSlotsEnabled, multi_product_enabled: multiProductEnabled, emailChangeRequests, release_ack_v18k: env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true" });
     }
 
     if (pathname === "member/profile" && method === "PATCH") {
@@ -360,7 +474,17 @@ export async function onRequest({ request, env }) {
       const code = String(json.pairing_code || "").trim();
       const licenseId = String(json.license_id || "");
       if (!/^\d{8}$/.test(code) || !/^[0-9a-f-]{36}$/i.test(licenseId) || json.confirmed !== true) return response({ error: "CONFIRMATION_REQUIRED" }, 400);
-      const result = await rpc(env, "helix_pairing_approve", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_license_id: licenseId, p_member_id: session.user.id, p_actor_id: session.user.id, p_canary: otpCanary });
+      let result;
+      if (env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true") {
+        const pending = await rpc(env, "helix_pairing_lookup", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_license_id: licenseId, p_member_id: session.user.id, p_canary: otpCanary });
+        if (!pending?.ok) return response({ error: pending?.error_code || "INVALID_PAIRING" }, 400);
+        const normalizedServer = String(pending.broker_server || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+        const fingerprint = await registryFingerprint(env, normalizedServer, String(pending.account_login || "").trim());
+        await rpc(env, "helix_pairing_attach_registry", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_member_id: session.user.id, p_registry_fingerprint: fingerprint });
+        result = await rpc(env, "helix_pairing_approve_universal", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_license_id: licenseId, p_member_id: session.user.id, p_actor_id: session.user.id, p_canary: otpCanary });
+      } else {
+        result = await rpc(env, "helix_pairing_approve", { p_code_hash: await hmac(`helix-pair:v1:${code}`, env.PAIRING_HASH_SECRET), p_license_id: licenseId, p_member_id: session.user.id, p_actor_id: session.user.id, p_canary: otpCanary });
+      }
       if (!result?.ok) return response({ error: result?.error_code || "PAIRING_REJECTED" }, 400);
       return response({ ok: true, state: result.state, binding_id: result.binding_id, message: "Akun MT5 berhasil dipasangkan. EA akan menerima entitlement saat polling berikutnya." });
     }
@@ -375,7 +499,10 @@ export async function onRequest({ request, env }) {
       const licenseRows = await supabase(env, `helix_licenses?member_id=eq.${encodeURIComponent(session.user.id)}&deleted_at=is.null&select=id,product_slug,status,expires_at,license_key_hint`);
       const licenseById = new Map(licenseRows.map(item => [item.id, item]));
       const licenseIds = [...licenseById.keys()];
-      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&released_at=is.null&select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,first_seen_at&order=first_seen_at.desc`) : [];
+      // Released bindings that are retained because they own validated trades are still
+      // part of the member's historical performance. Entitlement for new EA activity
+      // remains enforced by the license/session RPCs, not by this read-only query.
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${licenseIds.join(",")})&select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,first_seen_at,released_at&order=first_seen_at.desc`) : [];
       const bindingIds = bindings.map(item => item.id);
       const [sessions, { rates, display: fxDisplay }] = await Promise.all([
         bindingIds.length ? supabase(env, `helix_license_sessions?binding_id=in.(${bindingIds.join(",")})&select=binding_id,last_telemetry_sync_at&order=last_telemetry_sync_at.desc&limit=5000`) : Promise.resolve([]),
@@ -426,10 +553,10 @@ export async function onRequest({ request, env }) {
       const ownedLicenseIds = licenseRows.map(item => item.id);
       if (licenseId && !ownedLicenseIds.includes(licenseId)) return response({ error: "INVALID_FILTER" }, 403);
       if (bindingId) {
-        const owned = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&license_id=in.(${ownedLicenseIds.join(",")})&released_at=is.null&select=id`) : [];
+        const owned = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&license_id=in.(${ownedLicenseIds.join(",")})&select=id`) : [];
         if (!owned.length) return response({ error: "INVALID_FILTER" }, 403);
       }
-      const allowedBindings = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${ownedLicenseIds.join(",")})&released_at=is.null&select=id`) : [];
+      const allowedBindings = ownedLicenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${ownedLicenseIds.join(",")})&select=id`) : [];
       if (!performanceGlobal) {
         const canaryMembers = await telemetryCanaryMembers(env);
         if (!canaryMembers.has(session.user.id)) return response({ status: "WAITING_FOR_EA_R7", message: "Performa canary hanya tersedia untuk member testing yang diizinkan." }, 200);
@@ -476,16 +603,17 @@ export async function onRequest({ request, env }) {
     if (pathname.startsWith("admin/email-change-requests/") && method === "POST") {
       const requestId = pathname.split("/").at(-1);
       if (!/^[0-9a-f-]{36}$/i.test(requestId) || !["approve", "reject"].includes(json.action)) return response({ error: "INVALID_REQUEST" }, 400);
-      const rows = await supabase(env, `helix_email_change_requests?id=eq.${encodeURIComponent(requestId)}&select=id,member_id,new_email,status,admin_note`);
+      const rows = await supabase(env, `helix_email_change_requests?id=eq.${encodeURIComponent(requestId)}&select=id,member_id,new_email,status,admin_note,expires_at`);
       const item = rows?.[0];
       if (!item) return response({ error: "REQUEST_NOT_FOUND" }, 404);
       if (item.status !== "pending") return response({ error: "REQUEST_NOT_PENDING" }, 409);
       if (json.action === "approve") {
+        if (item.expires_at && Date.parse(item.expires_at) <= Date.now()) return response({ error: "REQUEST_EXPIRED", message: "Request sudah kedaluwarsa; akun lama tidak diubah. Minta member mengajukan request baru." }, 409);
         const email = String(json.email || item.new_email).trim().toLowerCase();
         const displayName = String(json.display_name || "").trim().replace(/\s+/g, " ");
         if (email !== String(item.new_email).trim().toLowerCase() || !/^\S+@\S+\.\S+$/.test(email)) return response({ error: "EMAIL_MISMATCH", message: "Email invitation harus sama dengan email baru pada request." }, 400);
         if (displayName.length < 2 || displayName.length > 80) return response({ error: "INVALID_DISPLAY_NAME" }, 400);
-        const inviteMarker = /^email_change_invite_sent:([0-9a-f-]{36})$/i.exec(String(item.admin_note || ""));
+        const inviteMarker = /^email_change_invite_sent:([0-9a-f-]{36})(?:;.*)?$/i.exec(String(item.admin_note || ""));
         let memberRows = inviteMarker
           ? await supabase(env, `helix_members?id=eq.${encodeURIComponent(inviteMarker[1])}&select=id,email`)
           : await supabase(env, `helix_members?email=eq.${encodeURIComponent(email)}&select=id,email&limit=1`);
@@ -503,21 +631,118 @@ export async function onRequest({ request, env }) {
           }
         }
         if (!memberRows.length) return response({ error: "INVITE_MEMBER_PROFILE_NOT_READY", invitation_sent: Boolean(invited), message: "Invitation terkirim, tetapi profil member belum tersedia. Request tetap pending; periksa profil dan jangan kirim ulang invitation." }, 503);
-        const license = await rpc(env, "helix_admin_create_license", {
-          p_member_id: memberRows[0].id, p_actor_id: earlySession.user.id, p_product_slug: "quadriga",
-          p_legacy_hash: await digest(randomKey()), p_duration_days: 730, p_max_accounts: 5,
-          p_idempotency_key: requestId, p_memo: `Email change request ${requestId}`,
-        });
-        if (!license?.ok) return response({ error: license?.error_code || "INVITE_LICENSE_CREATION_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, message: "License baru gagal dibuat. Request tetap pending; periksa license sebelum retry." }, 503);
+        let issuedLicenses = [];
+        if (env.PORTAL_MULTIPRODUCT_ENABLED === "true") {
+          const oldLicenses = await listLicenses(env, `member_id=eq.${encodeURIComponent(item.member_id)}&deleted_at=is.null`);
+          const eligibleOld = oldLicenses.filter(row => row.status === "active" && (!row.expires_at || Date.parse(row.expires_at) > Date.now()));
+          const oldIds = eligibleOld.map(row => row.id);
+          const policies = oldIds.length ? await supabase(env, `helix_license_product_policies?license_id=in.(${oldIds.join(",")})&select=license_id,license_scope,allowed_products,license_package`) : [];
+          const policyById = new Map(policies.map(row => [row.license_id, row]));
+          const allProducts = await supabase(env, "helix_ea_products?enabled=eq.true&catalog_status=eq.published&all_access_eligible=eq.true&select=ea_product_id&order=ea_product_id.asc");
+          const grants = eligibleOld.map(old => {
+            const policy = policyById.get(old.id);
+            if (!policy) return { old, package: "dedicated", products: [String(old.product_slug || "quadriga").toLowerCase()] };
+            if (policy.license_scope === "helix_suite") return { old, package: "all", products: allProducts.map(x => x.ea_product_id) };
+            const products = [...new Set((policy.allowed_products || []).map(x => String(x).toLowerCase()))];
+            const pack = policy.license_package || (products.length > 1 ? "bundle" : "dedicated");
+            return { old, package: pack, products };
+          }).filter(grant => grant.products.length && ["dedicated", "bundle", "all"].includes(grant.package));
+          if (!grants.length) {
+            return response({ error: "NO_ACTIVE_ENTITLEMENTS_TO_COPY", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, message: "Tidak ada entitlement aktif yang bisa disalin secara akurat. Akun lama belum dinonaktifkan; periksa license sebelum retry." }, 409);
+          }
+          for (const grant of grants) {
+            if (grant.package === "dedicated" && grant.products.length !== 1 || grant.package === "bundle" && grant.products.length < 2 || grant.package === "all" && !grant.products.length) {
+              return response({ error: "OLD_ENTITLEMENT_INVALID", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, message: "Entitlement lama tidak valid untuk direplikasi; akun lama belum dinonaktifkan dan request tetap pending." }, 409);
+            }
+            const hex = await digest(`email-change:${requestId}:${grant.old.id}`), key = `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;
+            const remainingDays = grant.old.expires_at ? Math.min(3650, Math.max(1, Math.ceil((Date.parse(grant.old.expires_at)-Date.now())/86400000))) : 730;
+            const createdLicense = await rpc(env, "helix_admin_create_license", {
+              p_member_id: memberRows[0].id, p_actor_id: earlySession.user.id, p_product_slug: grant.products[0],
+              p_legacy_hash: await digest(`email-change-license:${requestId}:${grant.old.id}`), p_duration_days: remainingDays, p_max_accounts: 5,
+              p_idempotency_key: key, p_memo: `Email change ${requestId}; entitlement ${grant.old.id}`,
+            });
+            if (!createdLicense?.ok) return response({ error: createdLicense?.error_code || "INVITE_LICENSE_CREATION_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, licenses_created: issuedLicenses.length, message: "Sebagian entitlement baru mungkin telah dibuat; request tetap pending dan aman di-retry dengan key idempotent." }, 503);
+            let expiryHandoff;
+            try {
+              expiryHandoff = await rpc(env, "helix_admin_preserve_email_change_expiry", {
+                p_source_license_id: grant.old.id, p_target_license_id: createdLicense.license.id,
+                p_actor_id: earlySession.user.id, p_request_id: requestId,
+              });
+            } catch (error) {
+              try { await rpc(env, "helix_admin_update_license", { p_license_id: createdLicense.license.id, p_actor_id: earlySession.user.id, p_status: "suspended", p_reason: `Email change ${requestId}: expiry preservation unavailable; fail closed.` }); } catch { /* report the handoff blocker; old member remains active */ }
+              return response({ error: "EXPIRY_HANDOFF_UNAVAILABLE", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, message: "License target ditahan karena expiry exact belum dapat diverifikasi. Akun dan license lama belum dinonaktifkan." }, 503);
+            }
+            if (!expiryHandoff?.ok) return response({ error: expiryHandoff?.error_code || "EXPIRY_HANDOFF_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, message: "Expiry license baru tidak dapat disamakan persis dengan license sumber; akun lama belum dinonaktifkan." }, 503);
+            const policyResult = await rpc(env, "helix_admin_set_license_product_policy", { p_license_id: createdLicense.license.id, p_actor_id: earlySession.user.id, p_package: grant.package, p_allowed_products: grant.products, p_reason: `Email change ${requestId}; preserve ${grant.package} entitlement` });
+            if (!policyResult?.ok) return response({ error: policyResult?.error_code || "EMAIL_CHANGE_POLICY_COPY_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, licenses_created: issuedLicenses.length + 1, message: "License baru ada tetapi policy produk belum tersalin; akun lama belum dinonaktifkan." }, 503);
+            issuedLicenses.push(createdLicense.license);
+          }
+        } else {
+          let legacySourceLicense = null;
+          if (env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true") {
+            const sourceLicenses = await listLicenses(env, `member_id=eq.${encodeURIComponent(item.member_id)}&deleted_at=is.null`);
+            const activeSources = sourceLicenses.filter(row => row.status === "active" && (!row.expires_at || Date.parse(row.expires_at) > Date.now()));
+            if (activeSources.length !== 1 || String(activeSources[0]?.product_slug || "").toLowerCase() !== "quadriga") {
+              return response({ error: "MULTIPRODUCT_HANDOFF_REQUIRED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, message: "Handoff slot universal memerlukan sumber entitlement Quadriga tunggal; aktifkan jalur Multi-Product atau tinjau entitlement sebelum melanjutkan." }, 409);
+            }
+            const sourcePolicy = await supabase(env, `helix_license_product_policies?license_id=eq.${encodeURIComponent(activeSources[0].id)}&select=license_scope,allowed_products,license_package&limit=1`);
+            if (sourcePolicy[0] && (sourcePolicy[0].license_scope !== "product" || sourcePolicy[0].license_package === "all" || (sourcePolicy[0].allowed_products || []).length !== 1 || sourcePolicy[0].allowed_products[0] !== "quadriga")) {
+              return response({ error: "MULTIPRODUCT_HANDOFF_REQUIRED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, message: "Entitlement bukan Dedicated QUADRIGA dan tidak dapat dipertahankan oleh jalur email legacy; akun lama belum dinonaktifkan." }, 409);
+            }
+            legacySourceLicense = activeSources[0];
+          }
+          const license = await rpc(env, "helix_admin_create_license", {
+            p_member_id: memberRows[0].id, p_actor_id: earlySession.user.id, p_product_slug: "quadriga",
+            p_legacy_hash: await digest(`email-change-license:${requestId}:quadriga`), p_duration_days: legacySourceLicense?.expires_at ? Math.min(3650, Math.max(1, Math.ceil((Date.parse(legacySourceLicense.expires_at)-Date.now())/86400000))) : 730, p_max_accounts: 5,
+            p_idempotency_key: requestId, p_memo: `Email change request ${requestId}`,
+          });
+          if (!license?.ok) return response({ error: license?.error_code || "INVITE_LICENSE_CREATION_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, message: "License baru gagal dibuat. Request tetap pending; periksa license sebelum retry." }, 503);
+          if (legacySourceLicense) {
+            const expiryHandoff = await rpc(env, "helix_admin_preserve_email_change_expiry", { p_source_license_id: legacySourceLicense.id, p_target_license_id: license.license.id, p_actor_id: earlySession.user.id, p_request_id: requestId });
+            if (!expiryHandoff?.ok) {
+              try { await rpc(env, "helix_admin_update_license", { p_license_id: license.license.id, p_actor_id: earlySession.user.id, p_status: "suspended", p_reason: `Email change ${requestId}: expiry preservation failed.` }); } catch { /* old account remains active */ }
+              return response({ error: expiryHandoff?.error_code || "EXPIRY_HANDOFF_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, message: "Expiry target gagal disamakan dengan source; license target ditahan dan akun lama tetap aktif." }, 503);
+            }
+          }
+          issuedLicenses = [license.license];
+        }
+        if (env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true" && env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true") {
+          const oldLicenses = await listLicenses(env, `member_id=eq.${encodeURIComponent(item.member_id)}&deleted_at=is.null`);
+          const oldLicenseIds = oldLicenses.map(row => row.id);
+          const oldBindings = oldLicenseIds.length ? await supabase(env, `helix_license_bindings?license_id=in.(${oldLicenseIds.join(",")})&released_at=is.null&select=id,member_mt5_account_id`) : [];
+          if (oldBindings.some(binding => !binding.member_mt5_account_id)) return response({ error: "LEGACY_ACCOUNT_RECONCILIATION_REQUIRED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, licenses_created: issuedLicenses.length, message: "Binding MT5 lama belum terhubung ke canonical account. Akun lama tetap tidak diubah; selesaikan reconciliation sebelum menyetujui perubahan email." }, 409);
+          const oldAccounts = await supabase(env, `helix_member_mt5_accounts?member_id=eq.${encodeURIComponent(item.member_id)}&status=in.(active,pending_release,suspended,quarantined,unreconciled)&select=id,status`);
+          const releases = await Promise.all(oldAccounts.map(account => rpc(env, "helix_request_mt5_account_release", {
+            p_member_id: item.member_id, p_account_id: account.id, p_actor_id: earlySession.user.id,
+            p_reason: `Email change ${requestId}: full account release required before ownership can be re-established`,
+          })));
+          if (releases.some(result => !result?.ok)) return response({ error: "OLD_ACCOUNT_RELEASE_REQUEST_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, licenses_created: issuedLicenses.length, message: "Full-account release gagal dimulai. Akun lama belum disuspend; periksa binding dan retry request." }, 503);
+          const awaitingAck = releases.some(result => result.state === "PENDING_RELEASE");
+          if (awaitingAck) {
+            try { await adminAuth(env, `admin/users/${encodeURIComponent(item.member_id)}`, "PUT", { ban_duration: "876000h" }); }
+            catch { return response({ error: "OLD_ACCOUNT_PORTAL_SUSPEND_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, licenses_created: issuedLicenses.length, message: "Release ACK sudah diminta, tetapi blokir portal lama gagal. Terminal tetap berada pada PENDING RELEASE; ulangi setelah memeriksa Auth." }, 503); }
+            await supabase(env, `helix_email_change_requests?id=eq.${encodeURIComponent(requestId)}&status=eq.pending`, { method: "PATCH", body: { admin_note: `email_change_invite_sent:${memberRows[0].id};release_ack_pending`, expires_at: new Date(Date.now() + 14 * 86400000).toISOString() } });
+            return response({ ok: true, status: "awaiting_release_ack", new_member_id: memberRows[0].id, licenses: issuedLicenses, release_state: "PENDING_RELEASE", message: "Invitation dan license baru tersedia. Akses login portal lama diblokir; lisensi dan slot lama tetap pending-release sampai semua terminal mengirim ACK. Setelah itu admin dapat mengulangi approval untuk menyelesaikan request." }, 202);
+          }
+        }
+        if (env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true") {
+          const slotDigest = await digest(`email-change-slots:${requestId}`);
+          const slotIdempotencyKey = `${slotDigest.slice(0,8)}-${slotDigest.slice(8,12)}-5${slotDigest.slice(13,16)}-8${slotDigest.slice(17,20)}-${slotDigest.slice(20,32)}`;
+          const transfer = await rpc(env, "helix_admin_transfer_member_slots", {
+            p_source_member_id: item.member_id, p_target_member_id: memberRows[0].id, p_actor_id: earlySession.user.id,
+            p_request_id: requestId, p_idempotency_key: slotIdempotencyKey,
+            p_reason: `Email change ${requestId}: preserve exact member-wide slot capacity` });
+          if (!transfer?.ok) return response({ error: transfer?.error_code || "SLOT_CAPACITY_TRANSFER_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, licenses_created: issuedLicenses.length, message: "Entitlement baru mungkin sudah dibuat, tetapi kapasitas slot lama belum berpindah. Akun lama belum dinonaktifkan; retry aman dengan idempotency key." }, 409);
+        }
         const suspension = await rpc(env, "helix_admin_set_member_suspended", { p_member_id: item.member_id, p_actor_id: earlySession.user.id, p_suspended: true, p_reason: `Email change completed (${requestId}); old account access retired.` });
-        if (!suspension?.ok) return response({ error: suspension?.error_code || "OLD_ACCOUNT_SUSPEND_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, message: "Invitation/license baru sudah tersedia tetapi akun lama belum disuspend. Request tetap pending; jangan kirim ulang invitation." }, 503);
+        if (!suspension?.ok) return response({ error: suspension?.error_code || "OLD_ACCOUNT_SUSPEND_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, licenses_created: issuedLicenses.length, message: "Invitation/license baru sudah tersedia tetapi akun lama belum disuspend. Request tetap pending; jangan kirim ulang invitation." }, 503);
         try {
           await adminAuth(env, `admin/users/${encodeURIComponent(item.member_id)}`, "PUT", { ban_duration: "876000h" });
         } catch {
-          return response({ error: "OLD_ACCOUNT_AUTH_SUSPEND_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, old_license_suspended: true, message: "License lama sudah disuspend tetapi blokir Auth gagal. Request tetap pending; periksa Auth dan jangan kirim ulang invitation." }, 503);
+          return response({ error: "OLD_ACCOUNT_AUTH_SUSPEND_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, licenses_created: issuedLicenses.length, old_license_suspended: true, message: "License lama sudah disuspend tetapi blokir Auth gagal. Request tetap pending; periksa Auth dan jangan kirim ulang invitation." }, 503);
         }
         const decision = await rpc(env, "helix_email_change_complete", { p_request_id: requestId, p_actor_id: earlySession.user.id, p_note: `Invitation/license issued to ${email}; old account suspended.` });
-        return decision?.ok ? response({ ...decision, new_member_id: memberRows[0].id, license: license.license, old_account: { suspended: true, licenses_changed: suspension.licenses_changed, sessions_revoked: suspension.sessions_revoked } }) : response({ error: decision?.error_code || "REQUEST_COMPLETE_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, license_created: true, old_account_suspended: true }, 503);
+        return decision?.ok ? response({ ...decision, new_member_id: memberRows[0].id, licenses: issuedLicenses, old_account: { suspended: true, licenses_changed: suspension.licenses_changed, sessions_revoked: suspension.sessions_revoked } }) : response({ error: decision?.error_code || "REQUEST_COMPLETE_FAILED", invitation_sent: Boolean(invited), new_member_id: memberRows[0].id, licenses_created: issuedLicenses.length, old_account_suspended: true }, 503);
       }
       const decision = await rpc(env, "helix_email_change_decide", { p_request_id: requestId, p_actor_id: earlySession.user.id, p_approve: false, p_note: String(json.note || "").slice(0, 300) });
       if (!decision?.ok) return response({ error: decision?.error_code || "REQUEST_REJECTED" }, 400);
@@ -529,6 +754,12 @@ export async function onRequest({ request, env }) {
       if (session.error) return session.error;
       const bindingId = pathname.split("/").at(-1);
       if (!/^[0-9a-f-]{36}$/i.test(bindingId)) return response({ error: "BINDING_NOT_FOUND" }, 404);
+      if (env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true" && env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true") {
+        const bindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&select=id,member_mt5_account_id`);
+        if (!bindings[0]?.member_mt5_account_id) return response({ error: "CANONICAL_ACCOUNT_NOT_LINKED", message: "Binding lama belum direkonsiliasi ke canonical account; pelepasan penuh belum dapat dimulai dengan aman." }, 409);
+        const result = await rpc(env, "helix_request_mt5_account_release", { p_member_id: session.user.id, p_account_id: bindings[0].member_mt5_account_id, p_actor_id: session.user.id, p_reason: String(json.reason || "Member requested full MT5 account release") });
+        return result?.ok ? response({ ok: true, ...result }) : response({ error: result?.error_code || "RELEASE_REJECTED" }, 404);
+      }
       if (env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true") {
         const pending = await rpc(env, "helix_request_binding_release_v18k", { p_member_id: session.user.id, p_binding_id: bindingId, p_actor_id: session.user.id, p_reason: String(json.reason || "Member requested release") });
         return pending?.ok ? response({ ok: true, ...pending }) : response({ error: pending?.error_code || "RELEASE_REJECTED" }, 404);
@@ -542,13 +773,18 @@ export async function onRequest({ request, env }) {
       if (session.error) return session.error;
       const releaseAckV18k = env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true";
       const retentionFilter = releaseAckV18k ? `or=(released_at.is.null,released_at.gte.${encodeURIComponent(oneCalendarMonthAgo())})&` : "";
+      const universalSlotsEnabled = env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true";
+      const multiProductEnabled = env.PORTAL_MULTIPRODUCT_ENABLED === "true";
+      const memberFields = universalSlotsEnabled ? "id,email,display_name,role,created_at,mt5_slot_capacity" : "id,email,display_name,role,created_at";
+      const bindingFields = `id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at${releaseAckV18k ? ",release_state,release_request_id,release_requested_at" : ""}${universalSlotsEnabled ? ",member_mt5_account_id" : ""}`;
+      const materialFields = multiProductEnabled ? "id,title,description,kind,storage_path,published,created_at,ea_product_id,file_version,file_checksum_sha256" : "id,title,description,kind,storage_path,published,created_at";
       const [members, licenses, bindings, events, announcements, materials, authUsers] = await Promise.all([
-        supabase(env, "helix_members?select=id,email,display_name,role,created_at&order=created_at.desc"),
+        supabase(env, `helix_members?select=${memberFields}&order=created_at.desc`),
         listLicenses(env),
-        supabase(env, `helix_license_bindings?${retentionFilter}select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at${releaseAckV18k ? ",release_state,release_request_id,release_requested_at" : ""}&order=first_seen_at.desc`),
+        supabase(env, `helix_license_bindings?${retentionFilter}select=${bindingFields}&order=first_seen_at.desc`),
         supabase(env, "helix_license_events?select=id,license_id,event_type,metadata,created_at&order=created_at.desc&limit=100"),
-        supabase(env, "helix_announcements?select=id,title,body,kind,published,published_at,created_at&order=created_at.desc"),
-        supabase(env, "helix_materials?select=id,title,description,kind,storage_path,published,created_at&order=created_at.desc"),
+        supabase(env, `helix_announcements?select=id,title,body,kind,published,published_at,created_at${multiProductEnabled ? ",ea_product_id" : ""}&order=created_at.desc`),
+        supabase(env, `helix_materials?select=${materialFields}&order=created_at.desc`),
         adminAuth(env, "admin/users?page=1&per_page=1000", "GET"),
       ]);
       const authById = new Map((authUsers.users || []).map(user => [user.id, user]));
@@ -565,11 +801,27 @@ export async function onRequest({ request, env }) {
           binding.terminal_status = binding.release_state === "released" ? "—" : binding.last_sync_at && Date.parse(binding.last_sync_at) >= offlineBefore ? "ONLINE" : "OFFLINE";
         }
       }
-      return response({ admin: session.member, members: enrichedMembers, licenses, bindings, events, announcements, materials, emailRequests: emailRequests.map(item => ({ ...item, member: membersById.get(item.member_id) || null })), emailRequestsAvailable, release_ack_v18k: env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true" });
+      if (multiProductEnabled) await attachProductSessions(env, bindings);
+      let products = [], memberAccounts = [];
+      if (multiProductEnabled) products = await supabase(env, "helix_ea_products?select=ea_product_id,display_name,description,enabled,catalog_status,all_access_eligible,min_version,max_version&order=display_name.asc");
+      if (universalSlotsEnabled) memberAccounts = await supabase(env, "helix_member_mt5_accounts?select=id,member_id,broker_server,account_login,mode,status,created_at,released_at&order=created_at.desc");
+      if (universalSlotsEnabled) for (const account of memberAccounts) account.bindings = bindings.filter(binding => binding.member_mt5_account_id === account.id);
+      return response({ admin: session.member, members: enrichedMembers, licenses, bindings, accounts: memberAccounts, products, events, announcements, materials, emailRequests: emailRequests.map(item => ({ ...item, member: membersById.get(item.member_id) || null })), emailRequestsAvailable, release_ack_v18k: env.PORTAL_LICENSE_RELEASE_ACK_V18K === "true", universal_slots_enabled: universalSlotsEnabled, multi_product_enabled: multiProductEnabled });
     }
 
     const session = await requireUser(request, env, pathname.startsWith("admin/"));
     if (session.error) return session.error;
+
+    if (pathname.startsWith("admin/mt5-accounts/") && pathname.endsWith("/release") && method === "POST") {
+      if (env.PORTAL_UNIVERSAL_SLOTS_ENABLED !== "true" || env.PORTAL_LICENSE_RELEASE_ACK_V18K !== "true") return response({ error: "ACCOUNT_RELEASE_NOT_ENABLED" }, 503);
+      const accountId = pathname.split("/").at(-2), reason = String(json.reason || "").trim();
+      if (!/^[0-9a-f-]{36}$/i.test(accountId) || reason.length < 3 || reason.length > 300) return response({ error: "INVALID_ACCOUNT_RELEASE" }, 400);
+      await rateLimit(request, env, "admin_mt5_account_release", session.user.id, 10, 60);
+      const accounts = await supabase(env, `helix_member_mt5_accounts?id=eq.${encodeURIComponent(accountId)}&select=id,member_id,status&limit=1`);
+      if (!accounts[0]) return response({ error: "ACCOUNT_NOT_FOUND" }, 404);
+      const result = await rpc(env, "helix_request_mt5_account_release", { p_member_id: accounts[0].member_id, p_account_id: accountId, p_actor_id: session.user.id, p_reason: reason });
+      return result?.ok ? response({ ok: true, ...result }) : response({ error: result?.error_code || "ACCOUNT_RELEASE_FAILED" }, 409);
+    }
 
     if (pathname === "admin/performance/accounts" && method === "GET") {
       const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
@@ -592,7 +844,7 @@ export async function onRequest({ request, env }) {
         canaryLicenseIds = [...new Set(canaryLicenses.map(row => row.id))];
         if (!canaryLicenseIds.length) return response({ status: "CANARY", accounts: [], message: "Member canary belum memiliki license aktif." });
       }
-      const clauses = ["released_at=is.null", "select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at,first_seen_at", "order=first_seen_at.desc", "limit=1000"];
+      const clauses = ["select=id,license_id,broker_server,account_login,mode,magic_base,last_sync_at,released_at,first_seen_at", "order=first_seen_at.desc", "limit=1000"];
       if (bindingFilter && canaryLicenseIds) {
         const requestedBinding = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingFilter)}&select=license_id&limit=1`);
         if (!requestedBinding.length || !canaryLicenseIds.includes(requestedBinding[0].license_id)) return response({ error: "INVALID_FILTER" }, 404);
@@ -652,7 +904,9 @@ export async function onRequest({ request, env }) {
       const from = boundedPerformanceFrom(fromValue);
       if (from === undefined || (toValue && toValue <= from)) return response({ error: "INVALID_PERFORMANCE_PERIOD" }, 400);
       const bindings = await supabase(env, `helix_license_bindings?id=eq.${encodeURIComponent(bindingId)}&select=id,license_id,broker_server,account_login,mode,magic_base,released_at&limit=1`);
-      const binding = bindings[0]; if (!binding || binding.released_at) return response({ error: "BINDING_NOT_FOUND" }, 404);
+      // Released bindings remain valid historical-performance selectors; their EA
+      // sessions cannot sync because release state is enforced by license RPCs.
+      const binding = bindings[0]; if (!binding) return response({ error: "BINDING_NOT_FOUND" }, 404);
       const licenses = await supabase(env, `helix_licenses?id=eq.${encodeURIComponent(binding.license_id)}&deleted_at=is.null&select=id,member_id,status,expires_at&limit=1`);
       if (!licenses.length) return response({ error: "LICENSE_NOT_FOUND" }, 404);
       if (!performanceGlobal && !(await telemetryCanaryMembers(env)).has(licenses[0].member_id)) return response({ error: "PERFORMANCE_CANARY_ONLY" }, 403);
@@ -820,6 +1074,79 @@ export async function onRequest({ request, env }) {
       }
     }
 
+    if (pathname === "admin/products" && method === "GET") {
+      if (env.PORTAL_MULTIPRODUCT_ENABLED !== "true") return response({ error: "MULTI_PRODUCT_NOT_ENABLED" }, 503);
+      const products = await supabase(env, "helix_ea_products?select=ea_product_id,display_name,description,enabled,catalog_status,all_access_eligible,min_version,max_version,created_at,updated_at&order=display_name.asc");
+      return response({ products });
+    }
+
+    if (pathname === "admin/products" && method === "POST") {
+      if (env.PORTAL_MULTIPRODUCT_ENABLED !== "true") return response({ error: "MULTI_PRODUCT_NOT_ENABLED" }, 503);
+      const id = String(json.ea_product_id || "").trim().toLowerCase();
+      const name = contentText(json.display_name, 120, "Nama produk", true);
+      const reason = String(json.reason || "").trim();
+      if (!validProductId(id) || reason.length < 3 || reason.length > 300 || !validVersionRange(json.min_version || null, json.max_version || null)) return response({ error: "INVALID_PRODUCT" }, 400);
+      let series = await supabase(env, `helix_series?slug=eq.${encodeURIComponent(id)}&select=slug,name&limit=1`);
+      if (!series.length) {
+        try { await supabase(env, "helix_series", { method: "POST", body: { slug: id, name } }); }
+        catch { return response({ error: "PRODUCT_SERIES_ALIAS_REQUIRED", message: "Produk tidak dapat dibuat sampai alias seri legacy (slug/name) tersedia di helix_series." }, 409); }
+      }
+      const rows = await supabase(env, "helix_ea_products?select=*", { method: "POST", body: {
+        ea_product_id: id, display_name: name, description: contentText(json.description, 2000, "Deskripsi"),
+        enabled: false, catalog_status: "draft", all_access_eligible: false,
+        min_version: json.min_version ? String(json.min_version).trim() : null,
+        max_version: json.max_version ? String(json.max_version).trim() : null,
+      } });
+      await supabase(env, "helix_product_events", { method: "POST", body: { ea_product_id: id, actor_id: session.user.id, event_type: "created", reason, metadata: { catalog_status: "draft" } } });
+      return response({ ok: true, product: rows[0] }, 201);
+    }
+
+    if (pathname.startsWith("admin/products/") && method === "PATCH") {
+      if (env.PORTAL_MULTIPRODUCT_ENABLED !== "true") return response({ error: "MULTI_PRODUCT_NOT_ENABLED" }, 503);
+      const id = pathname.split("/").at(-1), reason = String(json.reason || "").trim();
+      if (!validProductId(id) || reason.length < 3 || reason.length > 300) return response({ error: "INVALID_PRODUCT" }, 400);
+      const current = await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(id)}&select=ea_product_id,enabled,catalog_status,all_access_eligible,min_version,max_version&limit=1`);
+      if (!current.length) return response({ error: "PRODUCT_NOT_FOUND" }, 404);
+      const patch = {};
+      if (Object.hasOwn(json, "display_name")) patch.display_name = contentText(json.display_name, 120, "Nama produk", true);
+      if (Object.hasOwn(json, "description")) patch.description = contentText(json.description, 2000, "Deskripsi");
+      if (Object.hasOwn(json, "min_version")) patch.min_version = json.min_version ? String(json.min_version).trim() : null;
+      if (Object.hasOwn(json, "max_version")) patch.max_version = json.max_version ? String(json.max_version).trim() : null;
+      if (!validVersionRange(patch.min_version ?? current[0].min_version, patch.max_version ?? current[0].max_version)) return response({ error: "INVALID_PRODUCT_VERSION_RANGE", message: "Versi harus berupa angka terstruktur seperti 1.9, 1.10, atau 1.9c; versi minimum tidak boleh melebihi maksimum." }, 400);
+      if (Object.hasOwn(json, "catalog_status")) {
+        const status = String(json.catalog_status);
+        if (!["draft", "published", "disabled", "archived"].includes(status)) return response({ error: "INVALID_CATALOG_STATUS" }, 400);
+        patch.catalog_status = status; patch.enabled = status === "published";
+      }
+      const changingAll = Object.hasOwn(json, "all_access_eligible") && Boolean(json.all_access_eligible) !== Boolean(current[0].all_access_eligible);
+      if (!Object.keys(patch).length && !changingAll) return response({ error: "NO_PRODUCT_CHANGES" }, 400);
+      // Include/exclude is a separately audited RPC that updates every explicit ALL grant.
+      // Publish first so that this authorization-changing operation can validate the catalog item.
+      const patchBeforeAdmission = changingAll && json.all_access_eligible === true && patch.catalog_status === "published";
+      if (changingAll && json.all_access_eligible === true && patch.catalog_status && patch.catalog_status !== "published") return response({ error: "PUBLISH_BEFORE_ALL_INCLUSION" }, 409);
+      if (patchBeforeAdmission) {
+        await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: { ...patch, updated_at: new Date().toISOString() } });
+      }
+      if (changingAll) {
+        const admission = await rpc(env, "helix_admin_set_all_access_product", { p_product_id: id, p_actor_id: session.user.id, p_include: Boolean(json.all_access_eligible), p_reason: reason });
+        if (!admission?.ok) return response({ error: admission?.error_code || "ALL_ACCESS_POLICY_UPDATE_FAILED", product_metadata_saved: Object.keys(patch).length > 0 }, 409);
+        if (Object.keys(patch).length && !patchBeforeAdmission) await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: { ...patch, updated_at: new Date().toISOString() } });
+      } else if (Object.keys(patch).length) {
+        await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: { ...patch, updated_at: new Date().toISOString() } });
+        await supabase(env, "helix_product_events", { method: "POST", body: { ea_product_id: id, actor_id: session.user.id, event_type: patch.catalog_status === "published" ? "published" : patch.catalog_status === "archived" ? "archived" : patch.catalog_status === "disabled" ? "disabled" : "metadata_updated", reason, metadata: patch } });
+      }
+      const product = await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+      return response({ ok: true, product: product[0] });
+    }
+
+    if (pathname.startsWith("admin/members/") && pathname.endsWith("/slots") && method === "POST") {
+      if (env.PORTAL_UNIVERSAL_SLOTS_ENABLED !== "true") return response({ error: "UNIVERSAL_SLOTS_NOT_ENABLED" }, 503);
+      const memberId = pathname.split("/").at(-2), delta = Number(json.delta), idempotencyKey = String(json.idempotency_key || ""), reason = String(json.reason || "").trim();
+      if (!/^[0-9a-f-]{36}$/i.test(memberId) || !Number.isInteger(delta) || delta === 0 || delta % 5 !== 0 || !/^[0-9a-f-]{36}$/i.test(idempotencyKey) || reason.length < 3 || reason.length > 300) return response({ error: "INVALID_SLOT_ADJUSTMENT" }, 400);
+      const result = await rpc(env, "helix_admin_adjust_member_slots", { p_member_id: memberId, p_actor_id: session.user.id, p_delta: delta, p_idempotency_key: idempotencyKey, p_reason: reason });
+      return result?.ok ? response(result) : response({ error: result?.error_code || "SLOT_ADJUSTMENT_FAILED" }, 400);
+    }
+
     if (pathname === "admin/licenses" && method === "POST") {
       const email = String(json.email || "").trim().toLowerCase();
       const idempotencyKey = String(json.idempotency_key || "");
@@ -827,13 +1154,45 @@ export async function onRequest({ request, env }) {
       const memberRows = await supabase(env, `helix_members?email=eq.${encodeURIComponent(email)}&select=id,email`);
       if (!memberRows.length) return response({ error: "Buat/invite member lebih dulu sebelum membuat license." }, 400);
       const expiryDays = json.expiry_days === undefined ? 730 : Number(json.expiry_days);
-      const maxAccounts = json.max_accounts === undefined ? 5 : Number(json.max_accounts);
-      if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 3650 || !Number.isInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 5) return response({ error: "Masa aktif harus 1–3650 hari dan slot harus 1–5." }, 400);
-      if (String(json.product_slug || "quadriga") !== "quadriga") return response({ error: "Produk license belum tersedia." }, 400);
+      const universalSlotsEnabled = env.PORTAL_UNIVERSAL_SLOTS_ENABLED === "true";
+      const multiProductEnabled = env.PORTAL_MULTIPRODUCT_ENABLED === "true";
+      const maxAccounts = universalSlotsEnabled ? 5 : (json.max_accounts === undefined ? 5 : Number(json.max_accounts));
+      if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 3650 || !Number.isInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 5) return response({ error: "Masa aktif harus 1–3650 hari dan batas legacy per-license 1–5." }, 400);
+      const productSlug = String(json.product_slug || "quadriga");
+      if (!validProductId(productSlug) || (!multiProductEnabled && productSlug !== "quadriga")) return response({ error: "Produk license belum tersedia." }, 400);
+      let productId = productSlug;
+      let packageType = "dedicated";
+      let allowedProducts = [productId];
+      if (multiProductEnabled) {
+        packageType = String(json.license_package || "dedicated");
+        if (!["dedicated", "bundle", "all"].includes(packageType)) return response({ error: "INVALID_LICENSE_PACKAGE" }, 400);
+        let rawAllowedProducts = json.allowed_products;
+        if (typeof rawAllowedProducts === "string") {
+          try { rawAllowedProducts = JSON.parse(rawAllowedProducts); } catch { return response({ error: "INVALID_ALLOWED_PRODUCTS" }, 400); }
+        }
+        const requested = Array.isArray(rawAllowedProducts) ? [...new Set(rawAllowedProducts.map(value => String(value).trim().toLowerCase()))] : [productId];
+        if (!requested.length || requested.some(value => !validProductId(value))) return response({ error: "INVALID_ALLOWED_PRODUCTS" }, 400);
+        const catalog = await supabase(env, `helix_ea_products?ea_product_id=in.(${requested.join(",")})&enabled=eq.true&catalog_status=eq.published&select=ea_product_id,all_access_eligible`);
+        if (catalog.length !== requested.length) return response({ error: "PRODUCT_NOT_PUBLISHED" }, 400);
+        if (packageType === "dedicated" && requested.length !== 1 || packageType === "bundle" && requested.length < 2) return response({ error: "PACKAGE_PRODUCT_COUNT_MISMATCH" }, 400);
+        if (packageType === "all" && requested.some(value => !catalog.find(product => product.ea_product_id === value)?.all_access_eligible)) return response({ error: "PRODUCT_NOT_IN_ALL_PACKAGE" }, 400);
+        productId = requested[0]; allowedProducts = requested;
+      }
       const internalLegacyValue = randomKey();
       const hash = await digest(internalLegacyValue);
-      const created = await rpc(env, "helix_admin_create_license", { p_member_id: memberRows[0].id, p_actor_id: session.user.id, p_product_slug: String(json.product_slug || "quadriga"), p_legacy_hash: hash, p_duration_days: expiryDays, p_max_accounts: maxAccounts, p_idempotency_key: idempotencyKey, p_memo: String(json.memo || "").slice(0,300) });
+      const created = await rpc(env, "helix_admin_create_license", { p_member_id: memberRows[0].id, p_actor_id: session.user.id, p_product_slug: productId, p_legacy_hash: hash, p_duration_days: expiryDays, p_max_accounts: maxAccounts, p_idempotency_key: idempotencyKey, p_memo: String(json.memo || "").slice(0,300) });
       if (!created?.ok) return response({ error: created?.error_code || "LICENSE_CREATE_FAILED" }, 400);
+      if (multiProductEnabled) {
+        const policy = await rpc(env, "helix_admin_set_license_product_policy", { p_license_id: created.license.id, p_actor_id: session.user.id, p_package: packageType, p_allowed_products: allowedProducts, p_reason: String(json.memo || "Initial product entitlement").slice(0,300) });
+        if (!policy?.ok) return response({ error: policy?.error_code || "LICENSE_POLICY_ASSIGN_FAILED", license_created: true, license_id: created.license.id, warning: "License dibuat dalam status dedicated default; review admin sebelum aktivasi member." }, 503);
+      }
+      if (universalSlotsEnabled) {
+        const initialSlots = await rpc(env, "helix_admin_ensure_member_initial_slots", {
+          p_member_id: memberRows[0].id, p_actor_id: session.user.id,
+          p_idempotency_key: idempotencyKey, p_reason: `Initial slot package for license ${created.license.id}`,
+        });
+        if (!initialSlots?.ok) return response({ error: initialSlots?.error_code || "INITIAL_SLOT_GRANT_FAILED", license_created: true, license_id: created.license.id, policy_assigned: multiProductEnabled, warning: "License tersimpan, tetapi kapasitas slot awal belum terkonfirmasi. Retry dengan idempotency key yang sama atau selesaikan melalui admin." }, 503);
+      }
       return response({ ok: true, license: created.license, activation: created.activation, duration_days: expiryDays }, created.idempotent ? 200 : 201);
     }
 
@@ -910,6 +1269,15 @@ export async function onRequest({ request, env }) {
       const kind = String(json.kind || "update");
       if (!ANNOUNCEMENT_KINDS.has(kind)) return response({ error: "Kategori announcement tidak valid." }, 400);
       const row = { title: contentText(json.title, 180, "Judul", true), body: contentText(json.body, 20000, "Isi pengumuman", true), kind, published: Boolean(json.published), published_at: json.published ? new Date().toISOString() : null, created_by: session.user.id };
+      if (env.PORTAL_MULTIPRODUCT_ENABLED === "true") {
+        const productId = String(json.ea_product_id || "").trim();
+        if (productId) {
+          if (!validProductId(productId)) return response({ error: "INVALID_PRODUCT" }, 400);
+          const product = await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(productId)}&select=ea_product_id,enabled,catalog_status&limit=1`);
+          if (!product[0]?.enabled || product[0]?.catalog_status !== "published") return response({ error: "PRODUCT_NOT_AVAILABLE" }, 400);
+          row.ea_product_id = productId;
+        } else row.ea_product_id = null;
+      }
       const created = await supabase(env, "helix_announcements?select=*", { method: "POST", body: row });
       return response({ ok: true, item: created[0] }, 201);
     }
@@ -924,7 +1292,7 @@ export async function onRequest({ request, env }) {
     if (pathname.startsWith("admin/announcements/") && method === "PATCH") {
       const id = pathname.split("/").at(-1);
       if (!CONTENT_ID.test(id)) return response({ error: "ID announcement tidak valid." }, 400);
-      const existing = await supabase(env, `helix_announcements?id=eq.${encodeURIComponent(id)}&select=id,published,published_at`);
+      const existing = await supabase(env, `helix_announcements?id=eq.${encodeURIComponent(id)}&select=id,published,published_at${env.PORTAL_MULTIPRODUCT_ENABLED === "true" ? ",ea_product_id" : ""}`);
       if (!existing.length) return response({ error: "Announcement tidak ditemukan." }, 404);
       const patch = {};
       if (Object.hasOwn(json, "title")) patch.title = contentText(json.title, 180, "Judul", true);
@@ -932,6 +1300,15 @@ export async function onRequest({ request, env }) {
       if (Object.hasOwn(json, "kind")) {
         if (!ANNOUNCEMENT_KINDS.has(String(json.kind))) return response({ error: "Kategori announcement tidak valid." }, 400);
         patch.kind = String(json.kind);
+      }
+      if (env.PORTAL_MULTIPRODUCT_ENABLED === "true" && Object.hasOwn(json, "ea_product_id")) {
+        const productId = String(json.ea_product_id || "").trim();
+        if (productId) {
+          if (!validProductId(productId)) return response({ error: "INVALID_PRODUCT" }, 400);
+          const product = await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(productId)}&select=ea_product_id,enabled,catalog_status&limit=1`);
+          if (!product[0]?.enabled || product[0]?.catalog_status !== "published") return response({ error: "PRODUCT_NOT_AVAILABLE" }, 400);
+          patch.ea_product_id = productId;
+        } else patch.ea_product_id = null;
       }
       if (Object.hasOwn(json, "published")) {
         patch.published = Boolean(json.published);
@@ -945,7 +1322,23 @@ export async function onRequest({ request, env }) {
     if (pathname === "admin/materials" && method === "POST") {
       const kind = String(json.kind || "guide");
       if (!MATERIAL_KINDS.has(kind)) return response({ error: "Kategori material tidak valid." }, 400);
-      const row = { title: contentText(json.title, 180, "Nama material", true), description: contentText(json.description, 5000, "Deskripsi"), kind, storage_path: secureExternalUrl(json.storage_path), published: Boolean(json.published), created_by: session.user.id };
+      const row = { title: contentText(json.title, 180, "Nama material", true), description: contentText(json.description, 5000, "Deskripsi"), kind, storage_path: env.PORTAL_MULTIPRODUCT_ENABLED === "true" ? (String(json.storage_path || "").startsWith("https://") ? secureExternalUrl(json.storage_path) : null) : secureExternalUrl(json.storage_path), published: Boolean(json.published), created_by: session.user.id };
+      if (env.PORTAL_MULTIPRODUCT_ENABLED === "true") {
+        const productId = String(json.ea_product_id || "").trim();
+        if (productId) {
+          if (!validProductId(productId)) return response({ error: "INVALID_PRODUCT" }, 400);
+          const product = await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(productId)}&select=ea_product_id,catalog_status&limit=1`);
+          if (!product.length || product[0].catalog_status === "archived") return response({ error: "PRODUCT_NOT_AVAILABLE" }, 400);
+          row.ea_product_id = productId;
+          row.file_version = String(json.file_version || "").trim().slice(0, 64);
+        } else { row.ea_product_id = null; row.file_version = ""; }
+        if (row.published && !row.storage_path) return response({ error: "PUBLISHED_MATERIAL_REQUIRES_FILE" }, 400);
+        if (row.published && row.ea_product_id && row.storage_path && !row.storage_path.startsWith("helix-vip-materials:")) return response({ error: "PRODUCT_MATERIAL_REQUIRES_PRIVATE_STORAGE" }, 400);
+        if (row.published && row.ea_product_id) {
+          const product = await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(row.ea_product_id)}&select=enabled,catalog_status&limit=1`);
+          if (!product[0]?.enabled || product[0]?.catalog_status !== "published") return response({ error: "PRODUCT_MUST_BE_PUBLISHED_FIRST" }, 409);
+        }
+      }
       const file = form?.get("file");
       if (file && typeof file.arrayBuffer === "function" && file.size > 0) {
         const extension = await validateMaterialFile(file);
@@ -956,6 +1349,7 @@ export async function onRequest({ request, env }) {
         const objectPath = `${crypto.randomUUID()}/${filename}`;
         await storageRequest(env, `object/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: file, contentType: file.type || "application/octet-stream" });
         row.storage_path = `${bucket}:${objectPath}`;
+        if (env.PORTAL_MULTIPRODUCT_ENABLED === "true") row.file_checksum_sha256 = await digestBytes(await file.arrayBuffer());
       }
       const created = await supabase(env, "helix_materials?select=*", { method: "POST", body: row });
       return response({ ok: true, item: created[0] }, 201);
@@ -978,8 +1372,15 @@ export async function onRequest({ request, env }) {
       if (memberSession.error) return memberSession.error;
       const id = pathname.split("/").at(-1);
       if (!CONTENT_ID.test(id)) return response({ error: "ID material tidak valid." }, 400);
-      const rows = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&published=eq.true&select=storage_path,title`);
+      const multiProductEnabled = env.PORTAL_MULTIPRODUCT_ENABLED === "true";
+      const rows = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&published=eq.true&select=storage_path,title${multiProductEnabled ? ",ea_product_id" : ""}`);
       if (!rows.length || !rows[0].storage_path) return response({ error: "File material tidak ditemukan." }, 404);
+      if (multiProductEnabled && rows[0].ea_product_id) {
+        if (!rows[0].storage_path.startsWith("helix-vip-materials:")) return response({ error: "PRODUCT_MATERIAL_PRIVATE_STORAGE_REQUIRED" }, 409);
+        const licenseRows = await listLicenses(env, `member_id=eq.${encodeURIComponent(memberSession.user.id)}&deleted_at=is.null`);
+        const access = await productAccessSnapshot(env, licenseRows);
+        if (!access.ownedProductIds.has(rows[0].ea_product_id)) return response({ error: "PRODUCT_ENTITLEMENT_REQUIRED" }, 403);
+      }
       const storage = rows[0].storage_path;
       if (!storage.startsWith("helix-vip-materials:")) {
         let external;
@@ -1001,6 +1402,18 @@ export async function onRequest({ request, env }) {
       const existing = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=id,storage_path`);
       if (!existing.length) return response({ error: "Material tidak ditemukan." }, 404);
       const patch = {};
+      if (env.PORTAL_MULTIPRODUCT_ENABLED === "true") {
+        if (Object.hasOwn(json, "ea_product_id")) {
+          const productId = String(json.ea_product_id || "").trim();
+          if (productId) {
+            if (!validProductId(productId)) return response({ error: "INVALID_PRODUCT" }, 400);
+            const product = await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(productId)}&select=ea_product_id,catalog_status&limit=1`);
+            if (!product.length || product[0].catalog_status === "archived") return response({ error: "PRODUCT_NOT_AVAILABLE" }, 400);
+            patch.ea_product_id = productId;
+          } else patch.ea_product_id = null;
+        }
+        if (Object.hasOwn(json, "file_version")) patch.file_version = String(json.file_version || "").trim().slice(0, 64);
+      }
       if (Object.hasOwn(json, "title")) patch.title = contentText(json.title, 180, "Nama material", true);
       if (Object.hasOwn(json, "description")) patch.description = contentText(json.description, 5000, "Deskripsi");
       if (Object.hasOwn(json, "kind")) {
@@ -1008,7 +1421,7 @@ export async function onRequest({ request, env }) {
         patch.kind = String(json.kind);
       }
       if (Object.hasOwn(json, "published")) patch.published = Boolean(json.published);
-      if (Object.hasOwn(json, "storage_path") && String(json.storage_path || "").trim()) patch.storage_path = secureExternalUrl(json.storage_path);
+      if (Object.hasOwn(json, "storage_path") && String(json.storage_path || "").trim()) patch.storage_path = env.PORTAL_MULTIPRODUCT_ENABLED === "true" && !String(json.storage_path).startsWith("https://") ? null : secureExternalUrl(json.storage_path);
       const file = form?.get("file");
       if (file && typeof file.arrayBuffer === "function" && file.size > 0) {
         const extension = await validateMaterialFile(file);
@@ -1017,6 +1430,16 @@ export async function onRequest({ request, env }) {
         const objectPath = `${crypto.randomUUID()}/${filename}`;
         await storageRequest(env, `object/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", body: file, contentType: file.type || "application/octet-stream" });
         patch.storage_path = `${bucket}:${objectPath}`;
+        if (env.PORTAL_MULTIPRODUCT_ENABLED === "true") patch.file_checksum_sha256 = await digestBytes(await file.arrayBuffer());
+      }
+      if (env.PORTAL_MULTIPRODUCT_ENABLED === "true" && patch.published === true) {
+        const productId = Object.hasOwn(patch, "ea_product_id") ? patch.ea_product_id : (await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=ea_product_id&limit=1`))[0]?.ea_product_id;
+        const storagePath = patch.storage_path || existing[0].storage_path;
+        if (!storagePath) return response({ error: "PUBLISHED_MATERIAL_REQUIRES_FILE" }, 400);
+        if (productId) {
+          const product = await supabase(env, `helix_ea_products?ea_product_id=eq.${encodeURIComponent(productId)}&select=enabled,catalog_status&limit=1`);
+          if (!product[0]?.enabled || product[0]?.catalog_status !== "published") return response({ error: "PRODUCT_MUST_BE_PUBLISHED_FIRST" }, 409);
+        }
       }
       if (!Object.keys(patch).length) return response({ error: "Tidak ada perubahan yang dikirim." }, 400);
       const updated = await supabase(env, `helix_materials?id=eq.${encodeURIComponent(id)}&select=*`, { method: "PATCH", body: patch });
