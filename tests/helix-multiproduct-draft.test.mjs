@@ -69,15 +69,19 @@ test('product materials require entitlement and private storage; checksum hashes
 });
 
 test('member dashboard renders catalog and universal slot summary only behind response feature flag', () => {
-  assert.match(memberPortal, /if\(!state\.data\?\.multi_product_enabled\)return html/);
-  assert.match(memberPortal, /productCatalog\(\)\}/);
-  assert.match(memberPortal, /memberSlotCard\(\)\}<div class="dashboard-grid">/);
+  assert.match(memberPortal, /const universal=Boolean\(state\.data\?\.universal_slots_enabled\),multi=Boolean\(state\.data\?\.multi_product_enabled\)/);
+  assert.match(memberPortal, /const cards=`\$\{universal\?memberSlotCard\(\):''\}\$\{multi\?productCatalog\(\):''\}`/);
+  assert.match(memberPortal, /r2-summary-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\);gap:13px/);
+  assert.match(memberPortal, /@media\(max-width:760px\)\{\.r2-summary-grid\{grid-template-columns:1fr\}\}/);
   assert.match(memberPortal, /Katalog Produk/);
   assert.match(memberPortal, /Pool berlaku untuk semua produk dan license/);
   assert.match(memberPortal, /state\.data\?\.universal_slots_enabled\).*const pool=state\.data\.slot_pool/);
   assert.match(memberPortal, /akun unik dari \$\{pool\.total\} slot member-wide/);
   assert.match(memberPortal, /const legacyMemberPage=page;page=function\(\).*state\.page==='accounts'/);
   assert.match(memberPortal, /tidak dihitung per license.*berbagi pool member-wide/);
+  assert.match(memberPortal, /const activityPageSize=10/);
+  assert.match(memberPortal, /events\.slice\(\(activityPage-1\)\*activityPageSize,activityPage\*activityPageSize\)/);
+  assert.match(memberPortal, /data-member-activity-page/);
 });
 
 test('R2 admin exposes catalog, package entitlements, version controls and member-wide slot packages', () => {
@@ -92,6 +96,13 @@ test('R2 admin exposes catalog, package entitlements, version controls and membe
   assert.match(adminPortal, /const bindingsSection=`<section class="panel section">.*html=html\.replace\(bindingsSection,''\)/);
   assert.match(adminPortal, /data-r2-release-account/);
   assert.match(adminPortal, /full-account release/);
+  assert.match(adminPortal, /const r2PageSize=10/);
+  assert.match(adminPortal, /r2Search\('registry',r2RegistrySearch/);
+  assert.match(adminPortal, /r2Search\('release',r2ReleaseSearch/);
+  assert.match(adminPortal, /r2Search\('slots',r2SlotsSearch/);
+  assert.match(adminPortal, /return html\+r2RegistryPanel\(\)\+r2AccountReleasePanel\(\)\+auditSection/);
+  assert.match(adminPortal, /data-event-page/);
+  assert.match(adminPortal, /style="display:flex;align-items:center;gap:9px;margin:7px 0"/);
   assert.match(adminPortal, /\[5,10,15\]/);
   assert.match(adminPortal, /data\.universal_slots_enabled/);
   assert.match(api, /helix_admin_ensure_member_initial_slots/);
