@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "build:cloudflare": "node scripts/build-cloudflare.mjs",
     "check:cloudflare": "node scripts/check-cloudflare.mjs",
+    "test:performance": "node --test performance-worker/*.test.mjs",
     "import:backtest": "node scripts/import-backtest.mjs"
   },
   "dependencies": {

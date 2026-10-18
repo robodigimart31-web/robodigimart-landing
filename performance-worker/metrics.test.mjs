@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {calculate} from './metrics.mjs';
+import {calculate,mergeDealLedger,validateIncoming} from './metrics.mjs';
 const now=Date.parse('2026-10-10T08:00:00Z');
 const deal=(id,type,profit,extra={})=>({id:String(id),time:'2026.10.05 10:00:00',type,entry:0,magic:681001,position:'10',volume:.01,profit,commission:0,swap:0,fee:0,...extra});
 const payload=()=>({version:3,scope:'helix_magic_681',history_from:'2026.10.04 00:00:00',broker_now:'2026.10.10 10:00:00',recorded_at_unix:now/1000,account_type:'real',account_login:'123456',broker:'TEST-SERVER',currency:'USC',symbol:'XAUUSDc',deals:[deal(1,0,0,{commission:-2}),deal(2,1,10,{entry:1,commission:-2})]});
@@ -30,4 +30,20 @@ test('reject ambiguous mixed netting, missing entry, missing magic, duplicate, V
 });
 test('public payload contains no identifiers or raw history; no HELIX trades is an honest zero',()=>{
  const p=payload();p.deals=[];const r=calculate(p,now);assert.equal(r.report.net_profit,0);assert.equal(r.report.win_rate,null);assert.equal(r.account_login,undefined);assert.equal(r.deals,undefined);assert.equal(r.report.broker_label,null);assert.equal(r.points.at(-1).profit,0);
+});
+test('broker archival keeps 100 captured deals plus 20 new deals; smaller later window never erases history',()=>{
+ const makePosition=(n,day='05',profit=10)=>[
+  deal(n*2,0,0,{position:String(n),time:`2026.10.${day} 10:00:00`,entry:0}),
+  deal(n*2+1,1,profit,{position:String(n),time:`2026.10.${day} 10:01:00`,entry:1}),
+ ];
+ const p=payload();p.deals=Array.from({length:50},(_,i)=>makePosition(i+1)).flat();
+ const first=validateIncoming(p,now);let ledger=mergeDealLedger([],first);assert.equal(ledger.length,100);
+ const delta=payload();delta.recorded_at_unix=now/1000+600;delta.broker_now='2026.10.10 10:10:00';delta.deals=Array.from({length:10},(_,i)=>makePosition(i+51,'10')).flat();
+ ledger=mergeDealLedger(ledger,validateIncoming(delta,now+600000));assert.equal(ledger.length,120);
+ const archived=payload();archived.recorded_at_unix=now/1000+1200;archived.broker_now='2026.10.10 10:20:00';archived.deals=[...delta.deals,{id:'999999',time:'2026.10.10 10:15:00',type:2,entry:0,magic:0,profit:999999,commission:0,swap:0,fee:0}];
+ const fresh=validateIncoming(archived,now+1200000);assert.equal(fresh.length,20,'balance/archive correction is excluded from P/L ledger');
+ ledger=mergeDealLedger(ledger,fresh);assert.equal(ledger.length,120,'smaller broker window does not delete the original 100');
+ const cumulative=calculate({...archived,deals:ledger},now+1200000,1000);
+ assert.equal(cumulative.report.net_profit,600);assert.equal(cumulative.report.total_trades,60);assert.equal(cumulative.points.at(-1).profit,600);
+ assert.ok(ledger.some(d=>d.id==='2')&&ledger.some(d=>d.id==='100'),'old deal tickets remain persisted in the accumulated ledger');
 });
