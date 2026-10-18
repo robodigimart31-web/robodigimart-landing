@@ -1,12 +1,12 @@
 # HELIX D1 Telemetry — R1 Release Readiness
 
-**Recommendation: GO for the R1 Worker + D1 release once you give the separate final approval. It is not live yet.** No Production migration, deployment, or D1 write has been run.
+**This document began as the pre-deployment readiness record.** The approved Production execution results are recorded in the final section below.
 
 ## Scope and source
 
 - R1 scope is only the `helix-performance` Worker/D1 and its existing public Landing Page contract. No Supabase, portal, OTP, license, Release ACK, Email Change, or MQ5 changes.
-- Candidate is on local branch `codex/r1-d1-telemetry-release` based on Production source branch `origin/cloudflare-landing` commit `95a257f65e255e03146675ebd058372c13b0e392`. Candidate changes are local/uncommitted; nothing was pushed.
-- Current Production Worker version remains `d002d471-94de-4b9c-ad25-706cc9c90c3e` (created 2026-10-10 08:38:19 UTC). The checked-in Production source has the same Worker baseline as the earlier `c463a7c` source; the candidate is isolated in a separate worktree so unrelated backup changes are not included.
+- Release branch `codex/r1-d1-telemetry-release` is based on Production source branch `origin/cloudflare-landing` commit `95a257f65e255e03146675ebd058372c13b0e392`. The R1 source release is recorded in the commit listed below.
+- Pre-deployment Worker version was `d002d471-94de-4b9c-ad25-706cc9c90c3e` (created 2026-10-10 08:38:19 UTC). The checked-in Production source has the same Worker baseline as the earlier `c463a7c` source; the candidate is isolated in a separate worktree so unrelated backup changes are not included.
 
 ## Production read-only evidence
 
@@ -15,7 +15,7 @@
 - Existing separate historical snapshot is unchanged: `2026-10-10T08:23:23Z`, balance/equity `49,174.80`, cashflow `0`. It is not combined with deal P/L.
 - `d1_migrations` exists but is empty. The migration folder contains only `0002_telemetry_deal_ledger.sql`; there is no `0001` to replay. Policy: do not fabricate a registry record or rerun a base migration. The exact Wrangler migration command was tested against an isolated D1 with the same existing `live_state` / `snapshots` schema and empty registry; it applied only `0002` successfully, leaving those existing tables intact.
 - Read-only secret-name inspection confirms Production has `ACCOUNT_HASH_SALT` and `PUBLISHER_API_KEY` configured; no values were read.
-- Fresh Production Time Travel bookmark at `2026-10-18T14:01:11Z`: `0000006a-00000004-00005108-84b9d5f5a75fa9e199f0cf6fc44970bc`. It is available, but no Production restore was attempted.
+- Earlier read-only Production Time Travel bookmark (superseded by the fresh pre-migration bookmark in final results): `0000006a-00000004-00005108-84b9d5f5a75fa9e199f0cf6fc44970bc`. No Production restore was attempted.
 
 ## Isolated Cloudflare D1 + Worker test
 
@@ -53,9 +53,9 @@ The additive migration also adds a `live_state` write guard: an old Worker rollb
 - Cloudflare D1 migration, sync/deduplication/archive behavior, approval transition, rollback guard, concurrent account claim, and Time Travel restore were separately exercised against the isolated remote D1.
 - Production was queried only read-only and its public response was unchanged.
 
-## Exact commands — prepared, not executed
+## Exact commands — prepared in the pre-deployment record
 
-Run from the local `codex/r1-d1-telemetry-release` worktree after your final approval. Confirm `wrangler.jsonc` still targets D1 UUID `da6d2ee3-cfba-4d5a-8117-d6e1e9cb9770` immediately beforehand.
+These commands are retained as the exact release command record; execution results appear in the final section.
 
 ```powershell
 # Apply only 0002; the isolated test proved an empty existing registry applies this file alone.
@@ -64,8 +64,6 @@ npx wrangler d1 migrations apply helix-performance --remote --config performance
 # Deploy only the Landing Page performance Worker.
 npx wrangler deploy --config performance-worker/wrangler.jsonc --name helix-performance --message "R1 persistent landing telemetry ledger"
 ```
-
-Do not run these commands before the separate final approval.
 
 ## Recovery
 
@@ -78,8 +76,17 @@ Do not run these commands before the separate final approval.
   ```powershell
   npx wrangler d1 time-travel restore helix-performance --config performance-worker/wrangler.jsonc --bookmark 0000006a-00000004-00005108-84b9d5f5a75fa9e199f0cf6fc44970bc
   ```
-  Capture a new bookmark immediately before the actual migration window; the timestamp above is current read-only evidence, not a substitute for that fresh capture.
+  The bookmark shown above is historical; obtain a fresh bookmark before any future recovery operation. No restore was run for this release.
 
-## Final GO/NO-GO
+## Approved Production execution — 2026-10-18
 
-**Technical recommendation: GO for the specific R1 D1 migration + Worker deployment after your final approval. Not live yet.** Empty registry handling, isolated actual D1 migration/Worker behavior, baseline retention, V3 payload acceptance, account concurrency, authorization, and isolated recovery were validated. The absent pre-ledger raw history remains explicitly partial coverage—not a blocker to begin storing new deals and not a reason to publish fabricated cumulative statistics.
+- Release source commit: `e4b682abbf8f08a9138ae32bb395816327604f57`, based on `95a257f65e255e03146675ebd058372c13b0e392`.
+- Preflight passed: performance tests 21/21; typecheck; Next.js build; Cloudflare build/check; Wrangler Worker dry-run. The project has no literal `test` or `check` npm script; the available equivalents `test:performance` and `check:cloudflare` passed.
+- Migration SQL SHA-256: `694E4818DD06565E6DFDD9625E8E331D829AC36C5ED11CC51F80D83EC639CBD4`.
+- Fresh pre-migration Time Travel bookmark: `00000071-00000000-00005108-63b11edf65ee7375e1edbbd35741b2cc`.
+- Applied only `0002_telemetry_deal_ledger.sql` to D1 `helix-performance` (`da6d2ee3-cfba-4d5a-8117-d6e1e9cb9770`). The migration registry now contains only this migration.
+- Verified the original public payload remained 0 net profit / 0 closed trades, with the same update time, payload length, and two points. The existing single historical snapshot remained unchanged. Baseline copy provenance is `copied_from_live_state_before_ledger`; control mode is `legacy_baseline`, revision 0, and no ledger deals have been ingested.
+- Deployed only Worker `helix-performance`, version `a5ecfe66-6bf8-4dc6-9b78-cb832e2d6ddb`, message `R1 persistent landing telemetry ledger`.
+- Live `/api/performance` returned the preserved baseline with `live_status=legacy_baseline_preserved`; public response contained neither `account_login` nor `account_hash`.
+- Publisher connectivity is **not yet proven**: no MT5 terminal was available in the session and Production ledger count remains 0. No synthetic request or trade was sent. Await the next real publisher sync; do not attest coverage or publish cumulative ledger statistics until separately verified.
+- No Production restore was performed. R1 status: **LIVE for capture path, PARTIAL pending first real publisher sync and historical coverage verification**.
