@@ -25,6 +25,8 @@ export const performanceId = {
   "REAL · DELAYED": "REAL · TERTUNDA",
   "DEMO · DELAYED": "DEMO · TERTUNDA",
   "BACKTEST": "UJI HISTORIS",
+  "REAL · RESTORED": "REAL · PEMULIHAN MANUAL",
+  "Owner-restored history: deals selected from reconciled exports at exactly 1.00 lot. Magic numbers were unavailable for part of this source, so this dataset is owner-curated and is not magic-verified. Realized deal P/L only; excludes deposits, corrections and floating P/L. Eight deal-to-position links and three still-open positions are unresolved, so win rate, profit factor and closed-position count are withheld.": "Riwayat dipulihkan dari ekspor yang direkonsiliasi: deal dipilih dengan volume tepat 1,00 lot. Magic tidak tersedia pada sebagian sumber, sehingga data ini dikurasi berdasarkan pilihan pemilik dan bukan tervalidasi dengan magic. Hanya P/L deal terealisasi; deposit, koreksi, dan P/L mengambang dikecualikan. Delapan tautan deal-ke-posisi belum diketahui dan tiga posisi masih terbuka, sehingga win rate, profit factor, serta jumlah posisi selesai tidak ditampilkan.",
   "NO DATA": "BELUM ADA DATA",
   "Last updated": "Pembaruan terakhir",
   "Loading records…": "Memuat data…",

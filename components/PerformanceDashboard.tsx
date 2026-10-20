@@ -79,10 +79,13 @@ function MonthlyBars({points, currency, balance = false, monthly}: {points: Perf
   return <div className="monthly-chart">{bars.map(bar => <div key={bar.month} className="month-col" title={`${bar.month}: ${money(bar.change,currency,locale)}`}><div className="month-bar-track"><div className={`month-bar ${bar.change < 0 ? "negative" : ""}`} style={{height: `${Math.max(3, Math.abs(bar.change)/maximum * 85)}%`}}/></div><span>{new Date(bar.month + "-01T00:00:00Z").toLocaleDateString(languageTag(locale),{month:"short",timeZone:"UTC"})}</span></div>)}</div>;
 }
 function DataCard({kind, dataset, range, setRange, loading, failed}: {kind:"live"|"backtest";dataset:PerformanceDataset|null;range:Range;setRange:(range:Range)=>void;loading:boolean;failed:boolean}) {
-  const {t,locale}=useCopy();
+  const {t:baseT,locale}=useCopy();
   const isLive = kind === "live";
   if (isLive && dataset?.scope !== "helix_magic_681") dataset = null;
   const report = dataset?.report;
+  const restored = report?.provenance === "owner_curated_manual_restore";
+  const restoreDisclaimer = "Owner-restored history: deals selected from reconciled exports at exactly 1.00 lot. Magic numbers were unavailable for part of this source, so this dataset is owner-curated and is not magic-verified. Realized deal P/L only; excludes deposits, corrections and floating P/L. Eight deal-to-position links and three still-open positions are unresolved, so win rate, profit factor and closed-position count are withheld." as const;
+  const t = (value:Parameters<typeof baseT>[0]) => restored && value.startsWith("Only HELIX positions opened with magic") ? baseT(restoreDisclaimer) : restored && value.startsWith("REAL") && value.includes("DELAYED") ? baseT("REAL · RESTORED") : baseT(value);
   const balance = !isLive && dataset?.chart_basis === "balance";
   const sourcePoints = dataset?.points ?? [];
   const points = filteredPoints(sourcePoints.filter(p => isLive ? Number.isFinite(p.profit) : balance ? p.balance !== null : p.equity !== null), range);

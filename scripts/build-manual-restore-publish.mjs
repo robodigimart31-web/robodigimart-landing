@@ -1,0 +1,24 @@
+import {readFile,writeFile} from 'node:fs/promises';
+import {calculate,RESTORE_BATCH_ID} from '../performance-worker/metrics.mjs';
+
+const [dealsPath, outputPath] = process.argv.slice(2);
+if(!dealsPath||!outputPath)throw new Error('Usage: node scripts/build-manual-restore-publish.mjs <deals.json> <publish.sql>');
+const deals=JSON.parse(await readFile(dealsPath,'utf8'));
+if(!Array.isArray(deals)||deals.length!==418||deals.some(d=>d.restore_batch_id!==RESTORE_BATCH_ID))throw new Error('Restore set is not the verified 418-ticket batch');
+const now=Math.floor(Date.now()/1000)*1000, at=new Date(now).toISOString();
+const snapshot=calculate({version:3,scope:'helix_magic_681',history_from:'2026.10.04 00:00:00',broker_now:'2026.10.20 12:23:42',recorded_at_unix:now/1000,account_type:'real',account_login:'257471789',broker:'Exness-MT5Real36',currency:'USC',symbol:'XAUUSDc',deals},now,100000);
+if(snapshot.report.net_profit!==50351.4||snapshot.report.total_trades!==null||snapshot.report.magic_unverified_deal_count!==138||snapshot.report.period_start!=='2026-10-01T00:00:00Z')throw new Error('Calculated snapshot failed reconciliation assertions');
+const q=value=>`'${String(value).replaceAll("'","''")}'`;
+const operation='owner-restore-'+snapshot.report.restore_batch_id;
+const payload=JSON.stringify(snapshot);
+const sql=[
+  '-- Guarded one-time Landing Page snapshot publication. Restores only the owner-approved public performance snapshot.',
+  '-- Re-runnable; public state remains on frozen baseline unless candidate and ledger are fully verified.',
+  `UPDATE telemetry_control SET mode='ledger_approved_waiting_publish',revision=revision+1,last_operation=${q(operation)},last_accepted_at=${q(at)},coverage_attested_at=${q(at)},coverage_attestation=${q('Owner-approved 1.00-lot manual history restore; source SHA-256 recorded in telemetry_restore_batches; magic not verified for 138 source tickets.')}`,
+  `WHERE id=1 AND mode='legacy_baseline' AND revision=8 AND published_revision=0 AND account_hash IS NOT NULL AND EXISTS(SELECT 1 FROM telemetry_restore_batches b WHERE b.id=1 AND b.restore_batch_id=${q(RESTORE_BATCH_ID)} AND b.account_hash=telemetry_control.account_hash AND b.source_deal_count=418 AND b.expected_new_deal_count=314) AND (SELECT COUNT(*) FROM telemetry_deals d WHERE d.account_hash=telemetry_control.account_hash)=418;`,
+  `INSERT INTO telemetry_candidate(id,account_hash,revision,recorded_at,payload) SELECT 1,account_hash,revision,last_accepted_at,${q(payload)} FROM telemetry_control WHERE id=1 AND mode='ledger_approved_waiting_publish' AND last_operation=${q(operation)} ON CONFLICT(id) DO UPDATE SET account_hash=excluded.account_hash,revision=excluded.revision,recorded_at=excluded.recorded_at,payload=excluded.payload WHERE EXISTS(SELECT 1 FROM telemetry_control c WHERE c.id=1 AND c.mode='ledger_approved_waiting_publish' AND c.last_operation=${q(operation)} AND c.revision=excluded.revision);`,
+  `INSERT INTO live_state(id,account_hash,recorded_at,payload) SELECT 1,c.account_hash,c.last_accepted_at,p.payload FROM telemetry_control c JOIN telemetry_candidate p ON p.id=1 AND p.account_hash=c.account_hash AND p.revision=c.revision AND p.recorded_at=c.last_accepted_at WHERE c.id=1 AND c.mode='ledger_approved_waiting_publish' AND c.last_operation=${q(operation)} ON CONFLICT(id) DO UPDATE SET recorded_at=excluded.recorded_at,payload=excluded.payload WHERE live_state.account_hash=excluded.account_hash AND julianday(excluded.recorded_at)>julianday(live_state.recorded_at);`,
+  `UPDATE telemetry_control SET mode='ledger_verified',published_revision=revision WHERE id=1 AND mode='ledger_approved_waiting_publish' AND last_operation=${q(operation)} AND EXISTS(SELECT 1 FROM live_state s JOIN telemetry_candidate p ON p.id=1 WHERE s.id=1 AND s.account_hash=telemetry_control.account_hash AND s.recorded_at=telemetry_control.last_accepted_at AND s.payload=p.payload AND p.revision=telemetry_control.revision AND p.payload=${q(payload)}) AND (SELECT COUNT(*) FROM telemetry_deals d WHERE d.account_hash=telemetry_control.account_hash)=418;`,
+].join('\n');
+await writeFile(outputPath,sql+'\n','utf8');
+process.stdout.write(JSON.stringify({at,net_profit:snapshot.report.net_profit,period_start:snapshot.report.period_start,period_end:snapshot.report.period_end,source_deals:418,unknown_magic:snapshot.report.magic_unverified_deal_count,unmapped_positions:8,trade_metrics_complete:snapshot.report.trade_metrics_complete,sql:outputPath}));

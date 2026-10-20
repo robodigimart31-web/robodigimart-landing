@@ -31,6 +31,18 @@ test('reject ambiguous mixed netting, missing entry, missing magic, duplicate, V
 test('public payload contains no identifiers or raw history; no HELIX trades is an honest zero',()=>{
  const p=payload();p.deals=[];const r=calculate(p,now);assert.equal(r.report.net_profit,0);assert.equal(r.report.win_rate,null);assert.equal(r.account_login,undefined);assert.equal(r.deals,undefined);assert.equal(r.report.broker_label,null);assert.equal(r.points.at(-1).profit,0);
 });
+test('owner-curated manual restore counts selected realized deals without magic but never bypasses normal Publisher validation',()=>{
+ const p=payload();
+ const restore=(id,time,entry,profit,position)=>({id:String(id),time,type:entry===0?0:1,entry,magic:null,position,volume:1,profit,commission:0,swap:0,fee:0,restore_batch_id:'HELIX_REAL_257471789_DEAL_RECON_2026-10-01_to_20_LOT1_FINAL',restore_owner_selected:true});
+ p.deals=[restore(10,'2026.10.01 09:00:00',0,0,'501'),restore(11,'2026.10.01 10:00:00',1,20,'501'),restore(12,'2026.10.01 11:00:00',1,5,null),deal(13,0,900,{time:'2026.10.05 12:00:00',position:'502',volume:.1,magic:0})];
+ p.deals[2].entry=1;p.deals[2].type=1;
+ const r=calculate(p,now);
+ assert.equal(r.report.net_profit,25,'lot-1 deal P/L counted once; non-1-lot source row excluded');
+ assert.equal(r.report.total_trades,null);assert.equal(r.report.win_rate,null);assert.equal(r.report.profit_factor,null);
+ assert.equal(r.report.provenance,'owner_curated_manual_restore');assert.equal(r.report.magic_unverified_deal_count,3);
+ assert.equal(r.report.period_start,'2026-10-01T00:00:00Z');
+ assert.throws(()=>validateIncoming(p,now),'manual restore exception is not available to normal MT5 publisher requests');
+});
 test('broker archival keeps 100 captured deals plus 20 new deals; smaller later window never erases history',()=>{
  const makePosition=(n,day='05',profit=10)=>[
   deal(n*2,0,0,{position:String(n),time:`2026.10.${day} 10:00:00`,entry:0}),

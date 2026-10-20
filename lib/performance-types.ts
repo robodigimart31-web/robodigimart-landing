@@ -16,6 +16,12 @@ export interface PerformanceReport {
   period_start: string | null;
   period_end: string | null;
   updated_at: string;
+  provenance?: string;
+  selection_filter?: string;
+  restore_batch_id?: string;
+  restored_deal_count?: number;
+  magic_unverified_deal_count?: number;
+  trade_metrics_complete?: boolean;
 }
 export interface PerformancePoint {
   recorded_at: string;
