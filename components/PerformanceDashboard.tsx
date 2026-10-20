@@ -85,7 +85,7 @@ function DataCard({kind, dataset, range, setRange, loading, failed}: {kind:"live
   const report = dataset?.report;
   const restored = report?.provenance === "owner_curated_manual_restore";
   const restoreDisclaimer = "Owner-restored history: the baseline uses owner-selected deals at exactly 1.00 lot; magic is unverified for part of the source. Net realized P/L covers all selected deals. Win rate and profit factor include observed outcomes from mapped positions and owner-selected exits without a verified position link; open positions are not counted as outcomes." as const;
-  const t = (value:Parameters<typeof baseT>[0]) => restored && value.startsWith("Only HELIX positions opened with magic") ? baseT(restoreDisclaimer) : restored && value.startsWith("REAL") && value.includes("DELAYED") ? baseT("REAL · RESTORED") : baseT(value);
+  const t = (value:Parameters<typeof baseT>[0]) => restored && value.startsWith("Only HELIX positions opened with magic") ? baseT(restoreDisclaimer) : restored && value.startsWith("REAL") ? baseT("REAL") : baseT(value);
   const balance = !isLive && dataset?.chart_basis === "balance";
   const sourcePoints = dataset?.points ?? [];
   const points = filteredPoints(sourcePoints.filter(p => isLive ? Number.isFinite(p.profit) : balance ? p.balance !== null : p.equity !== null), range);

@@ -25,7 +25,7 @@ export const performanceId = {
   "REAL · DELAYED": "REAL · TERTUNDA",
   "DEMO · DELAYED": "DEMO · TERTUNDA",
   "BACKTEST": "UJI HISTORIS",
-  "REAL · RESTORED": "REAL · PEMULIHAN MANUAL",
+  "REAL": "REAL",
   "Owner-restored history: the baseline uses owner-selected deals at exactly 1.00 lot; magic is unverified for part of the source. Net realized P/L covers all selected deals. Win rate and profit factor include observed outcomes from mapped positions and owner-selected exits without a verified position link; open positions are not counted as outcomes.": "Riwayat pemulihan manual: baseline memakai deal pilihan pemilik dengan volume tepat 1,00 lot; magic tidak terverifikasi untuk sebagian sumber. P/L terealisasi mencakup semua deal terpilih. Win rate dan profit factor menghitung hasil posisi terpetakan serta deal penutupan pilihan pemilik yang tidak memiliki tautan posisi terverifikasi; posisi terbuka tidak dihitung sebagai hasil.",
   "Identified positions include closed and open position IDs. Win rate/PF count mapped realized position outcomes plus owner-selected exits without verified position links. The unmatched exits are counted separately, not guessed into a position.": "Jumlah posisi mencakup ID posisi yang sudah ditutup maupun masih terbuka. Win rate/PF menghitung hasil terealisasi posisi terpetakan ditambah deal penutupan pilihan pemilik tanpa tautan posisi yang terverifikasi. Deal penutupan tanpa tautan dihitung terpisah, tidak ditebak masuk ke suatu posisi.",
   "Identified Positions": "Posisi Teridentifikasi",
