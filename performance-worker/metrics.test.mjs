@@ -38,10 +38,11 @@ test('owner-curated manual restore counts selected realized deals without magic 
  p.deals[2].entry=1;p.deals[2].type=1;
  const r=calculate(p,now);
  assert.equal(r.report.net_profit,15,'the exact-1-lot owner restore plus future verified deals are both accumulated');
- assert.equal(r.report.total_trades,3);assert.equal(r.report.win_rate,33.33);assert.equal(r.report.profit_factor,2);
+ assert.equal(r.report.total_trades,4);assert.equal(r.report.win_rate,50);assert.equal(r.report.profit_factor,2.5);
  assert.equal(r.report.provenance,'owner_curated_manual_restore');assert.equal(r.report.magic_unverified_deal_count,5);
- assert.equal(r.report.trade_metrics_scope,'realized_position_outcomes_including_owner_selected_unmatched_exit');assert.equal(r.report.excluded_unmapped_deal_count,1);
+ assert.equal(r.report.trade_metrics_scope,'realized_position_outcomes_plus_owner_selected_unmatched_exit_deals');assert.equal(r.report.excluded_unmapped_deal_count,1);
  assert.equal(r.report.identified_position_count,4);assert.equal(r.report.open_position_count,1);assert.equal(r.report.unmatched_exit_position_count,1);
+ assert.equal(r.report.ungrouped_exit_outcome_count,1);
  assert.equal(r.report.period_start,'2026-10-01T00:00:00Z');
  assert.throws(()=>validateIncoming(p,now),'manual restore exception is not available to normal MT5 publisher requests');
 });
