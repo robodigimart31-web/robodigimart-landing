@@ -62,20 +62,19 @@ export function mergeDealLedger(previous, incoming) {
 export function calculate(p, now = Date.now(), maxDeals = 15000) {
   const {start,end} = validateEnvelope(p, now, maxDeals, true);
   const restored = p.deals.some(d=>d.restore_batch_id===RESTORE_BATCH_ID);
-  const selected = restored ? p.deals.filter(d=>d.volume===1) : p.deals;
+  // Keep the manual baseline on its approved 1.00-lot selection, while future
+  // magic-validated publisher deals of any lot size continue accumulating.
+  const selected = restored ? p.deals.filter(d=>d.restore_batch_id===RESTORE_BATCH_ID ? d.volume===1 : true) : p.deals;
   const positions = new Map(), events = [];
   let net=0, wins=0, trades=0, grossProfit=0, grossLoss=0, incompleteTradeMapping=false;
   for (const d of selected) {
     if (d.type !== 0 && d.type !== 1) continue;
     const time = brokerDate(d.time);
-    if (restored) {
-      // Owner-curated restore P/L is deal-based and deduped by ticket. This
-      // preserves realized exits whose opening position predates the exports.
-      const change=d.profit+d.commission+d.swap+d.fee;
-      net+=change;events.push({time,change,id:d.id});
-      if (d.restore_batch_id===RESTORE_BATCH_ID && d.position===null) incompleteTradeMapping=true;
-    }
     if (d.restore_batch_id===RESTORE_BATCH_ID && d.position===null) {
+      // The owner explicitly selected this realized 1-lot deal; preserve its
+      // P/L without inventing a position grouping for it.
+      const change=d.profit+d.commission+d.swap+d.fee;
+      net+=change;events.push({time,change,id:d.id});incompleteTradeMapping=true;
       continue;
     }
     const deals = positions.get(d.position) || [];
@@ -95,12 +94,12 @@ export function calculate(p, now = Date.now(), maxDeals = 15000) {
     let pnl=0,volume=0;
     for (const d of deals) {
       const change=d.profit+d.commission+d.swap+d.fee;
-      pnl+=change;if(!restored){net+=change;events.push({time:d.time,change,id:d.id});}volume+=d.volume*(d.type===0?1:-1);
+      pnl+=change;net+=change;events.push({time:d.time,change,id:d.id});volume+=d.volume*(d.type===0?1:-1);
     }
-    if (Math.abs(volume)<1e-7) {
+    if (entries.length>0 && deals.some(d=>d.entry===1) && Math.abs(volume)<1e-7) {
       trades++;
       if(pnl>.000001){wins++;grossProfit+=pnl;}else if(pnl<-.000001)grossLoss-=pnl;
-    } else if (deals.some(isRestore)) incompleteTradeMapping=true;
+    } else if (restored) incompleteTradeMapping=true;
   }
   events.sort((a,b)=>a.time.localeCompare(b.time) || (BigInt(a.id)<BigInt(b.id)?-1:1));
   const daily=new Map(), monthly=new Map();let profit=0;
@@ -112,7 +111,7 @@ export function calculate(p, now = Date.now(), maxDeals = 15000) {
   const restoredCount=restored?418:0;
   return {
     scope:'helix_magic_681',schema_version:3,chart_basis:'profit',
-    report:{series_slug:'quadriga',kind:'live',label:'HELIX QUADRIGA',account_type:'real',broker_label:null,currency:p.currency,symbol:p.symbol,initial_balance:null,net_profit:round(net),win_rate:incompleteTradeMapping?null:trades?round(wins/trades*100):null,profit_factor:incompleteTradeMapping?null:grossLoss?round(grossProfit/grossLoss):null,max_drawdown_pct:null,total_trades:incompleteTradeMapping?null:trades,period_start:start,period_end:end,updated_at:new Date(p.recorded_at_unix*1000).toISOString(),...(restored?{provenance:'owner_curated_manual_restore',selection_filter:'deal_volume_1.00_lot',restore_batch_id:RESTORE_BATCH_ID,restored_deal_count:restoredCount,magic_unverified_deal_count:unknownMagic,trade_metrics_complete:!incompleteTradeMapping}: {})},
+    report:{series_slug:'quadriga',kind:'live',label:'HELIX QUADRIGA',account_type:'real',broker_label:null,currency:p.currency,symbol:p.symbol,initial_balance:null,net_profit:round(net),win_rate:trades?round(wins/trades*100):null,profit_factor:grossLoss?round(grossProfit/grossLoss):null,max_drawdown_pct:null,total_trades:trades,period_start:start,period_end:end,updated_at:new Date(p.recorded_at_unix*1000).toISOString(),...(restored?{provenance:'owner_curated_manual_restore',selection_filter:'manual_baseline_volume_1.00_lot_plus_future_magic_validated_deals',trade_metrics_scope:'fully_mapped_closed_positions_only',restore_batch_id:RESTORE_BATCH_ID,restored_deal_count:restoredCount,excluded_unmapped_deal_count:selected.filter(d=>d.restore_batch_id===RESTORE_BATCH_ID&&d.position===null).length,excluded_incomplete_position_count:Math.max(0,positions.size-trades),magic_unverified_deal_count:unknownMagic,trade_metrics_complete:!incompleteTradeMapping}: {})},
     monthly:[...monthly].map(([month,change])=>({month,change:round(change)})),points,
   };
 }

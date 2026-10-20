@@ -84,7 +84,7 @@ function DataCard({kind, dataset, range, setRange, loading, failed}: {kind:"live
   if (isLive && dataset?.scope !== "helix_magic_681") dataset = null;
   const report = dataset?.report;
   const restored = report?.provenance === "owner_curated_manual_restore";
-  const restoreDisclaimer = "Owner-restored history: deals selected from reconciled exports at exactly 1.00 lot. Magic numbers were unavailable for part of this source, so this dataset is owner-curated and is not magic-verified. Realized deal P/L only; excludes deposits, corrections and floating P/L. Eight deal-to-position links and three still-open positions are unresolved, so win rate, profit factor and closed-position count are withheld." as const;
+  const restoreDisclaimer = "Owner-restored history: the baseline uses owner-selected deals at exactly 1.00 lot; magic is unverified for part of the source. Net realized P/L covers all selected deals. Win rate, profit factor and completed-position count use only mapped, fully closed positions; unresolved positions are excluded and may be updated by future verified syncs." as const;
   const t = (value:Parameters<typeof baseT>[0]) => restored && value.startsWith("Only HELIX positions opened with magic") ? baseT(restoreDisclaimer) : restored && value.startsWith("REAL") && value.includes("DELAYED") ? baseT("REAL · RESTORED") : baseT(value);
   const balance = !isLive && dataset?.chart_basis === "balance";
   const sourcePoints = dataset?.points ?? [];
@@ -105,6 +105,7 @@ function DataCard({kind, dataset, range, setRange, loading, failed}: {kind:"live
         <div className="metric"><label>{t("Profit Factor")}</label><strong>{num(report?.profit_factor ?? null,locale)}</strong></div>
         <div className="metric"><label>{t(isLive ? "Closed Positions" : balance ? "Max Equity DD (relative)" : "Max Drawdown")}</label><strong>{isLive ? (report?.total_trades?.toLocaleString(languageTag(locale)) ?? "-") : report?.max_drawdown_pct == null ? "-" : `${num(report.max_drawdown_pct,locale,2)}%`}</strong></div>
       </div>
+      {isLive && restored && <p className="card-disclaimer">{t("Position metrics use mapped, fully closed positions only; net profit covers the full selected history.")} {t("Unmapped deals")}: {report?.excluded_unmapped_deal_count ?? 0}; {t("Incomplete position groups")}: {report?.excluded_incomplete_position_count ?? 0}.</p>}
       <div className="chart-head"><h4>{t(isLive ? "Cumulative Net Profit" : balance ? "Balance Curve (daily close)" : "Equity Curve")}</h4><div className="chart-ranges" role="group" aria-label={`${t("Range")} ${t(isLive ? "Real Account Performance" : "Backtest Performance")}`}>{ranges.map(r=><button aria-pressed={range===r} onClick={()=>setRange(r)} className={range===r ? "selected" : ""} key={r}>{locale === "id" ? ({"1M":"1B","3M":"3B","6M":"6B","ALL":"SEMUA"}[r]) : r}</button>)}</div></div>
       {failed ? <div className="empty-curve">{t("Performance data is temporarily unavailable.")}</div> : <EquityChart points={points} balance={balance} profit={isLive}/>}
       {points.length >= 2 && <div className="chart-dates"><span>{dateString(points[0].recorded_at,locale)}</span><span>{dateString(points[points.length-1].recorded_at,locale)}</span></div>}

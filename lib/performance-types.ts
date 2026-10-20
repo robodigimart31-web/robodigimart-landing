@@ -21,6 +21,9 @@ export interface PerformanceReport {
   restore_batch_id?: string;
   restored_deal_count?: number;
   magic_unverified_deal_count?: number;
+  excluded_unmapped_deal_count?: number;
+  excluded_incomplete_position_count?: number;
+  trade_metrics_scope?: string;
   trade_metrics_complete?: boolean;
 }
 export interface PerformancePoint {

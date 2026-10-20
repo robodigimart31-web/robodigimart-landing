@@ -34,12 +34,13 @@ test('public payload contains no identifiers or raw history; no HELIX trades is 
 test('owner-curated manual restore counts selected realized deals without magic but never bypasses normal Publisher validation',()=>{
  const p=payload();
  const restore=(id,time,entry,profit,position)=>({id:String(id),time,type:entry===0?0:1,entry,magic:null,position,volume:1,profit,commission:0,swap:0,fee:0,restore_batch_id:'HELIX_REAL_257471789_DEAL_RECON_2026-10-01_to_20_LOT1_FINAL',restore_owner_selected:true});
- p.deals=[restore(10,'2026.10.01 09:00:00',0,0,'501'),restore(11,'2026.10.01 10:00:00',1,20,'501'),restore(12,'2026.10.01 11:00:00',1,5,null),deal(13,0,900,{time:'2026.10.05 12:00:00',position:'502',volume:.1,magic:0})];
+ p.deals=[restore(10,'2026.10.01 09:00:00',0,0,'501'),restore(11,'2026.10.01 10:00:00',1,20,'501'),restore(12,'2026.10.01 11:00:00',1,5,null),deal(13,0,0,{time:'2026.10.05 12:00:00',position:'502',volume:.1,magic:681001}),deal(14,1,-6,{time:'2026.10.05 12:01:00',position:'502',volume:.1,entry:1,magic:681001})];
  p.deals[2].entry=1;p.deals[2].type=1;
  const r=calculate(p,now);
- assert.equal(r.report.net_profit,25,'lot-1 deal P/L counted once; non-1-lot source row excluded');
- assert.equal(r.report.total_trades,null);assert.equal(r.report.win_rate,null);assert.equal(r.report.profit_factor,null);
+ assert.equal(r.report.net_profit,19,'the exact-1-lot owner restore plus future verified deals are both accumulated');
+ assert.equal(r.report.total_trades,2);assert.equal(r.report.win_rate,50);assert.equal(r.report.profit_factor,3.33);
  assert.equal(r.report.provenance,'owner_curated_manual_restore');assert.equal(r.report.magic_unverified_deal_count,3);
+ assert.equal(r.report.trade_metrics_scope,'fully_mapped_closed_positions_only');assert.equal(r.report.excluded_unmapped_deal_count,1);
  assert.equal(r.report.period_start,'2026-10-01T00:00:00Z');
  assert.throws(()=>validateIncoming(p,now),'manual restore exception is not available to normal MT5 publisher requests');
 });
