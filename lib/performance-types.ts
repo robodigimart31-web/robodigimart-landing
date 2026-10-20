@@ -23,6 +23,9 @@ export interface PerformanceReport {
   magic_unverified_deal_count?: number;
   excluded_unmapped_deal_count?: number;
   excluded_incomplete_position_count?: number;
+  identified_position_count?: number;
+  open_position_count?: number;
+  unmatched_exit_position_count?: number;
   trade_metrics_scope?: string;
   trade_metrics_complete?: boolean;
 }

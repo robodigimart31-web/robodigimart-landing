@@ -66,7 +66,7 @@ export function calculate(p, now = Date.now(), maxDeals = 15000) {
   // magic-validated publisher deals of any lot size continue accumulating.
   const selected = restored ? p.deals.filter(d=>d.restore_batch_id===RESTORE_BATCH_ID ? d.volume===1 : true) : p.deals;
   const positions = new Map(), events = [];
-  let net=0, wins=0, trades=0, grossProfit=0, grossLoss=0, incompleteTradeMapping=false;
+  let net=0, wins=0, trades=0, grossProfit=0, grossLoss=0, incompleteTradeMapping=false, openPositionCount=0, unmatchedExitPositionCount=0;
   for (const d of selected) {
     if (d.type !== 0 && d.type !== 1) continue;
     const time = brokerDate(d.time);
@@ -99,7 +99,17 @@ export function calculate(p, now = Date.now(), maxDeals = 15000) {
     if (entries.length>0 && deals.some(d=>d.entry===1) && Math.abs(volume)<1e-7) {
       trades++;
       if(pnl>.000001){wins++;grossProfit+=pnl;}else if(pnl<-.000001)grossLoss-=pnl;
-    } else if (restored) incompleteTradeMapping=true;
+    } else if (restored && entries.length===0 && deals.some(d=>d.entry===1) && deals.every(isRestore)) {
+      // Owner-selected realized exit with a known position ID but missing
+      // opening history: include its observed P/L outcome, while reporting it
+      // separately so it is not misrepresented as a fully mapped closure.
+      trades++; unmatchedExitPositionCount++;
+      if(pnl>.000001){wins++;grossProfit+=pnl;}else if(pnl<-.000001)grossLoss-=pnl;
+      incompleteTradeMapping=true;
+    } else if (restored) {
+      if (entries.length>0 && !deals.some(d=>d.entry===1)) openPositionCount++;
+      incompleteTradeMapping=true;
+    }
   }
   events.sort((a,b)=>a.time.localeCompare(b.time) || (BigInt(a.id)<BigInt(b.id)?-1:1));
   const daily=new Map(), monthly=new Map();let profit=0;
@@ -111,7 +121,7 @@ export function calculate(p, now = Date.now(), maxDeals = 15000) {
   const restoredCount=restored?418:0;
   return {
     scope:'helix_magic_681',schema_version:3,chart_basis:'profit',
-    report:{series_slug:'quadriga',kind:'live',label:'HELIX QUADRIGA',account_type:'real',broker_label:null,currency:p.currency,symbol:p.symbol,initial_balance:null,net_profit:round(net),win_rate:trades?round(wins/trades*100):null,profit_factor:grossLoss?round(grossProfit/grossLoss):null,max_drawdown_pct:null,total_trades:trades,period_start:start,period_end:end,updated_at:new Date(p.recorded_at_unix*1000).toISOString(),...(restored?{provenance:'owner_curated_manual_restore',selection_filter:'manual_baseline_volume_1.00_lot_plus_future_magic_validated_deals',trade_metrics_scope:'fully_mapped_closed_positions_only',restore_batch_id:RESTORE_BATCH_ID,restored_deal_count:restoredCount,excluded_unmapped_deal_count:selected.filter(d=>d.restore_batch_id===RESTORE_BATCH_ID&&d.position===null).length,excluded_incomplete_position_count:Math.max(0,positions.size-trades),magic_unverified_deal_count:unknownMagic,trade_metrics_complete:!incompleteTradeMapping}: {})},
+    report:{series_slug:'quadriga',kind:'live',label:'HELIX QUADRIGA',account_type:'real',broker_label:null,currency:p.currency,symbol:p.symbol,initial_balance:null,net_profit:round(net),win_rate:trades?round(wins/trades*100):null,profit_factor:grossLoss?round(grossProfit/grossLoss):null,max_drawdown_pct:null,total_trades:trades,period_start:start,period_end:end,updated_at:new Date(p.recorded_at_unix*1000).toISOString(),...(restored?{provenance:'owner_curated_manual_restore',selection_filter:'manual_baseline_volume_1.00_lot_plus_future_magic_validated_deals',trade_metrics_scope:'realized_position_outcomes_including_owner_selected_unmatched_exit',restore_batch_id:RESTORE_BATCH_ID,restored_deal_count:restoredCount,identified_position_count:positions.size,open_position_count:openPositionCount,unmatched_exit_position_count:unmatchedExitPositionCount,excluded_unmapped_deal_count:selected.filter(d=>d.restore_batch_id===RESTORE_BATCH_ID&&d.position===null).length,magic_unverified_deal_count:unknownMagic,trade_metrics_complete:!incompleteTradeMapping}: {})},
     monthly:[...monthly].map(([month,change])=>({month,change:round(change)})),points,
   };
 }
