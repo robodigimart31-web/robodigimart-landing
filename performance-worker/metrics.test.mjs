@@ -46,6 +46,16 @@ test('owner-curated manual restore counts selected realized deals without magic 
  assert.equal(r.report.period_start,'2026-10-01T00:00:00Z');
  assert.throws(()=>validateIncoming(p,now),'manual restore exception is not available to normal MT5 publisher requests');
 });
+test('broker CSV reconciliation adds only the owner-approved missing 1-lot close and deduplicates a later matching publisher exit',()=>{
+ const when=Date.parse('2026-10-20T22:00:00Z'),p=payload();p.recorded_at_unix=when/1000;p.broker_now='2026.10.20 22:00:00';
+ const supplement={id:'CSV1-2024489373',time:'2026.10.13 04:38:34',type:1,entry:1,magic:null,position:'2024489373',volume:1,profit:-1000,commission:0,swap:0,fee:0,restore_batch_id:'HELIX_BROKER_CSV_20261021',restore_owner_selected:true,restore_source:'broker_csv_closed_position'};
+ const restored={...supplement,id:'418',time:'2026.10.01 10:00:00',position:'501',profit:1000,restore_batch_id:'HELIX_REAL_257471789_DEAL_RECON_2026-10-01_to_20_LOT1_FINAL',restore_source:undefined};
+ p.deals=[restored,supplement];
+ const initial=calculate(p,when);assert.equal(initial.report.net_profit,0);assert.equal(initial.report.total_trades,2);assert.equal(initial.report.broker_csv_supplement_count,1);
+ p.deals.push(deal(500,1,-1000,{entry:1,position:'2024489373',volume:1,time:'2026.10.13 04:38:34',magic:681001}));
+ const synced=calculate(p,when);assert.equal(synced.report.net_profit,0);assert.equal(synced.report.total_trades,2,'matching publisher row supersedes the CSV summary instead of double counting');
+ assert.throws(()=>validateIncoming({...p,deals:[supplement]},when),'manual supplement must not be accepted from the public publisher endpoint');
+});
 test('broker archival keeps 100 captured deals plus 20 new deals; smaller later window never erases history',()=>{
  const makePosition=(n,day='05',profit=10)=>[
   deal(n*2,0,0,{position:String(n),time:`2026.10.${day} 10:00:00`,entry:0}),
