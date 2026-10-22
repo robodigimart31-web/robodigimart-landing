@@ -569,7 +569,7 @@ export async function onRequest({ request, env }) {
           current.trades += Number(row.trades) || 0;
           daily.set(date, current);
         }
-        return { binding_id: binding.id, label: `${binding.broker_server} Â· â€¢â€¢â€¢â€¢${String(binding.account_login).slice(-4)}`, product_slug: license.product_slug, unsupported_currencies: unsupported, points: [...daily].sort(([a], [b]) => a.localeCompare(b)).map(([date, value]) => ({ date, net_pnl_usd: Math.round((value.net_pnl_usd + Number.EPSILON) * 100) / 100, trades: value.trades })) };
+        return { binding_id: binding.id, label: `${binding.broker_server} \u00b7 \u2022\u2022\u2022\u2022${String(binding.account_login).slice(-4)}`, product_slug: license.product_slug, unsupported_currencies: unsupported, points: [...daily].sort(([a], [b]) => a.localeCompare(b)).map(([date, value]) => ({ date, net_pnl_usd: Math.round((value.net_pnl_usd + Number.EPSILON) * 100) / 100, trades: value.trades })) };
       }));
       return response({ status: "READY", series, currency_rates: fxDisplay, from, to, earliest_supported_date: "2026-09-01T00:00:00" });
     }

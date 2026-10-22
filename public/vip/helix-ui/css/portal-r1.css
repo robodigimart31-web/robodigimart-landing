@@ -67,7 +67,9 @@
 .hx-growth-svg{display:block;width:100%;height:auto;overflow:visible}
 .hx-growth-grid{stroke:#798083;stroke-opacity:.16;stroke-dasharray:3 7}
 .hx-growth-zero{stroke:#d9bd79;stroke-opacity:.36;stroke-width:1}
-.hx-growth-axis{fill:#879295;font:10px Manrope,system-ui,sans-serif}
+.hx-growth-axis{fill:#aeb8ba;stroke:none!important;font:600 12px Manrope,system-ui,sans-serif;text-rendering:geometricPrecision;paint-order:normal}
+.hx-growth-hitpoints circle{fill:transparent;stroke:transparent;pointer-events:all;cursor:crosshair}
+.hx-growth-hitpoints circle:focus-visible{fill:#ffd675;stroke:#fff1c2;stroke-width:2;outline:none}
 .hx-growth-legend{display:flex;gap:8px 16px;flex-wrap:wrap;margin-top:8px;padding-top:11px;border-top:1px solid #273034;color:#b8c0be;font-size:9px}
 .hx-growth-legend span{display:inline-flex;align-items:center;gap:6px;max-width:100%;overflow-wrap:anywhere}
 .hx-growth-legend i{width:9px;height:3px;flex:none;border-radius:3px;background:var(--growth-color)}
