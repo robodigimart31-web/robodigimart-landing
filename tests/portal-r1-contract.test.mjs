@@ -365,7 +365,7 @@ test('member growth chart permits read-only performance history for owned releas
 });
 
 test('member growth UI appears above MT5 accounts with responsive daily, weekly, monthly and duration controls', async()=>{
-  const ui=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8'),loader=await readFile('public/vip/helix-ui/js/portal-r1-loader.js','utf8'),css=await readFile('public/vip/helix-ui/css/portal-r1.css','utf8');assert.match(ui,/showMemberGrowthChart\(content,panel\);showMemberAccountPerformance\(content,panel\)/);assert.match(ui,/accountPanel\.before\(host\)/);assert.match(ui,/data-growth-unit="day"/);assert.match(ui,/data-growth-unit="week"/);assert.match(ui,/data-growth-unit="month"/);assert.match(ui,/Semua data tersedia \(sejak 1 Sep 2026\)/);assert.match(loader,/member-growth-chart-20261022-r1/);assert.match(css,/@media\(max-width:760px\)/);assert.match(css,/@media\(max-width:460px\)/);
+  const ui=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8'),loader=await readFile('public/vip/helix-ui/js/portal-r1-loader.js','utf8'),css=await readFile('public/vip/helix-ui/css/portal-r1.css','utf8');assert.match(ui,/showMemberGrowthChart\(content,panel\);showMemberAccountPerformance\(content,panel\)/);assert.match(ui,/accountPanel\.before\(host\)/);assert.match(ui,/data-growth-unit="day"/);assert.match(ui,/data-growth-unit="week"/);assert.match(ui,/data-growth-unit="month"/);assert.match(ui,/Semua data tersedia \(sejak 1 Sep 2026\)/);assert.match(loader,/member-growth-chart-20261022-r2/);assert.match(css,/@media\(max-width:760px\)/);assert.match(css,/@media\(max-width:460px\)/);
 });
 
 test('member growth chart helpers exist and filters are collapsed until applied',async()=>{
