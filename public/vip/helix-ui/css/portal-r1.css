@@ -42,3 +42,36 @@
 [data-r1-action=connect] .hx-icon{filter:brightness(0) saturate(100%)}
 
 .content-grid{align-items:stretch;row-gap:16px}
+.hx-member-growth{margin:14px 0 16px;min-width:0;overflow:hidden;background:radial-gradient(ellipse at 86% 5%,#9b6a201b,transparent 35%),linear-gradient(145deg,#111619,#090d10 76%);border-color:#5e471f;box-shadow:0 16px 38px #0005}
+.hx-member-growth .panel-head{margin-bottom:15px}
+.hx-growth-controls{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(240px,.85fr);gap:14px;align-items:start;padding:13px;border:1px solid #293237;border-radius:11px;background:#0b1013b8}
+.hx-growth-label{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:9px;color:#e9d8b2;font-size:11px;font-weight:800}
+.hx-growth-label span{color:#aeb8ba;font-size:10px;font-weight:550}
+.hx-growth-account-actions{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+.hx-growth-account-actions .btn{min-height:30px;padding:5px 9px;font-size:9px}
+.hx-growth-accounts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:154px;overflow:auto;padding:2px}
+.hx-growth-account{display:flex;align-items:center;gap:9px;min-width:0;padding:9px 10px;border:1px solid #30393c;border-radius:8px;background:linear-gradient(120deg,#171b1d,#0b1012);color:#f0e8d4;cursor:pointer;transition:border-color .16s,background .16s}
+.hx-growth-account:has(input:checked){border-color:#9a742d;background:linear-gradient(120deg,#262112,#111416);box-shadow:inset 2px 0 #e7b548}
+.hx-growth-account input{accent-color:#e9b643;flex:none;width:15px;height:15px}
+.hx-growth-account span{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;font-weight:750}
+.hx-growth-account small{display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;color:#98a2a4;font-size:9px;font-weight:500}
+.hx-growth-options{display:grid;gap:11px}
+.hx-growth-segments{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:3px;border:1px solid #30393c;border-radius:9px;background:#080c0e}
+.hx-growth-segments button{min-height:34px;border:0;border-radius:6px;background:transparent;color:#aeb8ba;font-size:10px;font-weight:750}
+.hx-growth-segments button[aria-pressed=true]{background:linear-gradient(110deg,#ffdc79,#bd811d);color:#201503;box-shadow:0 3px 12px #d6992a30}
+.hx-growth-duration{display:grid;gap:6px;color:#aeb8ba;font-size:10px;font-weight:700}
+.hx-growth-duration select{width:100%;min-height:38px;padding:8px 10px;border:1px solid #364247;border-radius:8px;background:#0a1013;color:#f2f1ed}
+.hx-growth-state{min-height:18px;margin:12px 2px 5px;color:#9da9aa;font-size:10px;line-height:1.5}
+.hx-growth-state.warn{color:#f3cb71}.hx-growth-state.error{color:#ff9297}
+.hx-growth-chart{min-width:0;min-height:210px;padding:8px 0 0}
+.hx-growth-svg{display:block;width:100%;height:auto;overflow:visible}
+.hx-growth-grid{stroke:#798083;stroke-opacity:.16;stroke-dasharray:3 7}
+.hx-growth-zero{stroke:#d9bd79;stroke-opacity:.36;stroke-width:1}
+.hx-growth-axis{fill:#879295;font:10px Manrope,system-ui,sans-serif}
+.hx-growth-legend{display:flex;gap:8px 16px;flex-wrap:wrap;margin-top:8px;padding-top:11px;border-top:1px solid #273034;color:#b8c0be;font-size:9px}
+.hx-growth-legend span{display:inline-flex;align-items:center;gap:6px;max-width:100%;overflow-wrap:anywhere}
+.hx-growth-legend i{width:9px;height:3px;flex:none;border-radius:3px;background:var(--growth-color)}
+.hx-growth-legend .hx-growth-total{color:#ffe4a1;font-weight:800}
+.hx-growth-legend .hx-growth-total i{background:#ffd675}
+@media(max-width:760px){.hx-growth-controls{grid-template-columns:1fr;gap:15px;padding:10px}.hx-growth-options{grid-template-columns:minmax(0,1fr) minmax(150px,.8fr);align-items:end}.hx-growth-options>.hx-growth-label{grid-column:1/-1;margin-bottom:-8px}.hx-growth-account{padding:8px}.hx-growth-chart{min-height:150px}.hx-growth-axis{font-size:9px}}
+@media(max-width:460px){.hx-growth-accounts{grid-template-columns:1fr;max-height:180px}.hx-growth-options{grid-template-columns:1fr}.hx-growth-options>.hx-growth-label{grid-column:auto;margin-bottom:-7px}.hx-growth-segments button{font-size:9px}.hx-member-growth .panel-head{gap:10px}.hx-member-growth .panel-head .btn{min-height:33px;padding:6px 8px;font-size:9px}}

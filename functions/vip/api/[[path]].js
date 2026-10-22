@@ -341,7 +341,7 @@ export async function onRequest({ request, env }) {
     const licenseRoute = pathname === "admin/licenses" || pathname.startsWith("admin/licenses/") || pathname.startsWith("member/bindings/") || pathname.startsWith("admin/members/") && pathname.endsWith("/slots") || pathname.startsWith("admin/mt5-accounts/");
     const emailRoute = pathname.startsWith("member/email-change-requests") || pathname.startsWith("admin/email-change-requests");
     const otpRoute = pathname.startsWith("member/pairings/");
-    const performanceRoute = pathname === "member/performance" || pathname === "member/performance/accounts";
+    const performanceRoute = pathname === "member/performance" || pathname === "member/performance/accounts" || pathname === "member/performance/growth";
     const contentAdminRoute = pathname === "admin/announcements" || pathname.startsWith("admin/announcements/") || pathname === "admin/materials" || pathname.startsWith("admin/materials/") || pathname === "admin/products" || pathname.startsWith("admin/products/");
     if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
     if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
@@ -534,6 +534,44 @@ export async function onRequest({ request, env }) {
         };
       }));
       return response({ status: performanceGlobal ? "READY" : performanceCanary ? "CANARY" : "WAITING_FOR_EA_R7", accounts, currency_rates: fxDisplay, from, to: toValue, earliest_supported_date: "2026-09-01T00:00:00", message: performanceGlobal ? null : "Performance Global masih OFF. Seluruh akun milik member canary yang diizinkan—demo maupun real—termasuk binding baru dicakup selama grant canary berlaku." });
+    }
+
+    if (pathname === "member/performance/growth" && method === "GET") {
+      const session = earlySession;
+      await rateLimit(request, env, "member_performance_growth", session.user.id, 20, 60);
+      const ids = [...new Set(String(url.searchParams.get("binding_ids") || "").split(",").filter(Boolean))];
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const from = boundedPerformanceFrom(url.searchParams.get("from"));
+      const to = brokerBound(url.searchParams.get("to"));
+      if (!ids.length || ids.length > 10 || ids.some(id => !uuid.test(id)) || from === undefined || to === undefined || (to && to <= from) || (to && Date.parse(`${to}Z`) - Date.parse(`${from}Z`) > 366 * 86400000)) return response({ error: "INVALID_FILTER" }, 400);
+      const licenseRows = await supabase(env, `helix_licenses?member_id=eq.${encodeURIComponent(session.user.id)}&deleted_at=is.null&select=id,product_slug`);
+      const licenses = new Map(licenseRows.map(item => [item.id, item]));
+      const licenseIds = [...licenses.keys()];
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?id=in.(${ids.map(encodeURIComponent).join(",")})&license_id=in.(${licenseIds.map(encodeURIComponent).join(",")})&released_at=is.null&select=id,license_id,broker_server,account_login`) : [];
+      if (bindings.length !== ids.length) return response({ error: "INVALID_FILTER" }, 403);
+      if (!performanceGlobal) {
+        const canaryMembers = await telemetryCanaryMembers(env);
+        if (!performanceCanary || !canaryMembers.has(session.user.id)) return response({ status: "WAITING_FOR_EA_R7", message: "Performa canary hanya tersedia untuk member testing yang diizinkan." }, 200);
+      }
+      const { rates, display: fxDisplay } = await currencyUsdRates(env);
+      const summaryFunction = performanceGlobal ? "helix_member_performance_daily_v2" : "helix_member_performance_canary_daily_v2";
+      const series = await Promise.all(bindings.map(async binding => {
+        const license = licenses.get(binding.license_id);
+        const rows = await rpc(env, summaryFunction, { p_member_id: session.user.id, p_license_id: license.id, p_binding_id: binding.id, p_from: from, p_to: to });
+        const unsupported = [...new Set((rows || []).filter(row => rates[row.currency] == null).map(row => row.currency))];
+        const daily = new Map();
+        for (const row of rows || []) {
+          const rate = rates[row.currency];
+          if (rate == null) continue;
+          const date = String(row.broker_date).slice(0, 10);
+          const current = daily.get(date) || { net_pnl_usd: 0, trades: 0 };
+          current.net_pnl_usd += Number(row.net_pnl) * rate;
+          current.trades += Number(row.trades) || 0;
+          daily.set(date, current);
+        }
+        return { binding_id: binding.id, label: `${binding.broker_server} Â· â€¢â€¢â€¢â€¢${String(binding.account_login).slice(-4)}`, product_slug: license.product_slug, unsupported_currencies: unsupported, points: [...daily].sort(([a], [b]) => a.localeCompare(b)).map(([date, value]) => ({ date, net_pnl_usd: Math.round((value.net_pnl_usd + Number.EPSILON) * 100) / 100, trades: value.trades })) };
+      }));
+      return response({ status: "READY", series, currency_rates: fxDisplay, from, to, earliest_supported_date: "2026-09-01T00:00:00" });
     }
 
     if (pathname === "member/performance" && method === "GET") {
