@@ -369,7 +369,7 @@ test('member growth UI appears above MT5 accounts with responsive daily, weekly,
 });
 
 test('member growth chart helpers exist and filters are collapsed until applied',async()=>{
-  const ui=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8');assert.match(ui,/function drawGrowth\(/);assert.match(ui,/data-growth-controls hidden/);assert.match(ui,/data-growth-filter-toggle aria-expanded="false"/);assert.match(ui,/data-growth-apply/);assert.match(ui,/controls\.hidden=true;toggle\.setAttribute\('aria-expanded','false'\);[\s\S]*?load\(\)/);
+  const ui=await readFile('public/vip/helix-ui/js/portal-r1.js','utf8'),loader=await readFile('public/vip/helix-ui/js/portal-r1-loader.js','utf8'),shell=await readFile('public/vip/index.html','utf8');assert.match(ui,/function drawGrowth\(/);assert.match(ui,/data-growth-controls hidden/);assert.match(ui,/data-growth-filter-toggle aria-expanded="false"/);assert.match(ui,/data-growth-apply/);assert.match(ui,/controls\.hidden=true;toggle\.setAttribute\('aria-expanded','false'\);[\s\S]*?load\(\)/);assert.match(loader,/portal-r1\.js\?v=member-growth-chart-20261022-r2/);assert.match(shell,/portal-r1-loader\.js\?v=member-growth-chart-20261022-r2/);
 });
 
 test('telemetry ingestion skips history earlier than the HELIX launch floor without blocking the batch', async t => {
