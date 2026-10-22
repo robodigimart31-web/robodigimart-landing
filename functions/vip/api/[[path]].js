@@ -547,7 +547,7 @@ export async function onRequest({ request, env }) {
       const licenseRows = await supabase(env, `helix_licenses?member_id=eq.${encodeURIComponent(session.user.id)}&deleted_at=is.null&select=id,product_slug`);
       const licenses = new Map(licenseRows.map(item => [item.id, item]));
       const licenseIds = [...licenses.keys()];
-      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?id=in.(${ids.map(encodeURIComponent).join(",")})&license_id=in.(${licenseIds.map(encodeURIComponent).join(",")})&released_at=is.null&select=id,license_id,broker_server,account_login`) : [];
+      const bindings = licenseIds.length ? await supabase(env, `helix_license_bindings?id=in.(${ids.map(encodeURIComponent).join(",")})&license_id=in.(${licenseIds.map(encodeURIComponent).join(",")})&select=id,license_id,broker_server,account_login`) : [];
       if (bindings.length !== ids.length) return response({ error: "INVALID_FILTER" }, 403);
       if (!performanceGlobal) {
         const canaryMembers = await telemetryCanaryMembers(env);
