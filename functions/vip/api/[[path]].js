@@ -1,5 +1,6 @@
 const DEFAULT_SUPABASE_URL = "https://wouwoefzghecuiknznvs.supabase.co";
 import { hmac, rateLimit, readJson as readBoundedJson, rpc, sha256, verifiedUser } from "../../_shared/portal.js";
+import { buildStrategyEstimator, parseEstimatorSelection } from "./strategy-estimator-model.js";
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -342,6 +343,7 @@ export async function onRequest({ request, env }) {
     const emailRoute = pathname.startsWith("member/email-change-requests") || pathname.startsWith("admin/email-change-requests");
     const otpRoute = pathname.startsWith("member/pairings/");
     const performanceRoute = pathname === "member/performance" || pathname === "member/performance/accounts" || pathname === "member/performance/growth";
+    const estimatorRoute = pathname === "member/strategy-estimator";
     const contentAdminRoute = pathname === "admin/announcements" || pathname.startsWith("admin/announcements/") || pathname === "admin/materials" || pathname.startsWith("admin/materials/") || pathname === "admin/products" || pathname.startsWith("admin/products/");
     if (licenseRoute && method !== "GET" && env.PORTAL_LICENSE_MANAGEMENT_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "license_management", message: "Perubahan license menunggu migrasi database terverifikasi." }, 503);
     if (emailRoute && env.PORTAL_EMAIL_CHANGE_ENABLED !== "true") return response({ error: "FEATURE_NOT_ACTIVATED", feature: "email_change", message: "Fitur perubahan email belum diaktifkan." }, 503);
@@ -350,9 +352,17 @@ export async function onRequest({ request, env }) {
     const performanceGlobal = env.PORTAL_PERFORMANCE_ENABLED === "true" && env.EA_R7_TELEMETRY_READY === "true";
     const performanceCanary = env.PORTAL_PERFORMANCE_CANARY_ENABLED === "true";
     if (performanceRoute && !performanceGlobal && !performanceCanary) return response({ status: "WAITING_FOR_EA_R7", message: "Trading Performance menunggu verifikasi protokol telemetry EA R7." }, 200);
-    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname.startsWith("member/performance") || pathname === "member/profile" || pathname.startsWith("admin/email-change-requests") || pathname.startsWith("admin/settings") || contentAdminRoute;
+    const earlyAuthRoute = pathname.startsWith("member/pairings/") || pathname.startsWith("member/email-change-requests") || pathname.startsWith("member/performance") || pathname === "member/profile" || estimatorRoute || pathname.startsWith("admin/email-change-requests") || pathname.startsWith("admin/settings") || contentAdminRoute;
     const earlySession = earlyAuthRoute ? await verifiedUser(request, env, pathname.startsWith("admin/")) : null;
     if (earlySession?.error) return earlySession.error;
+    if (estimatorRoute) {
+      if (method !== "GET") return response({ error: "METHOD_NOT_ALLOWED" }, 405);
+      if (earlySession.member?.role !== "member") return response({ error: "MEMBER_ACCESS_REQUIRED" }, 403);
+      await rateLimit(request, env, "member_strategy_estimator", earlySession.user.id, 30, 60);
+      const selection = parseEstimatorSelection(url.searchParams);
+      if (!selection) return response({ error: "INVALID_ESTIMATOR_FILTER" }, 400);
+      return response(buildStrategyEstimator(selection));
+    }
     if (contentAdminRoute && method !== "GET") {
       await rateLimit(request, env, "admin_content_write", earlySession.user.id, 40, 60);
       const length = Number(request.headers.get("content-length") || 0);
