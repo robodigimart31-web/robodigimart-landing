@@ -10,8 +10,8 @@
   <link rel="stylesheet" href="/vip/helix-ui/css/tokens.css">
   <link rel="stylesheet" href="/vip/helix-ui/css/components.css">
   <link rel="stylesheet" href="/vip/helix-ui/css/portal-adapter.css">
-  <link rel="stylesheet" href="/vip/strategy-estimator.css?v=20261023-r2">
-  <title>HELIX QUADRIGA Strategy Estimator | VIP Member</title>
+  <link rel="stylesheet" href="/vip/strategy-estimator.css?v=20261023-r3">
+  <title>Performa Strategi &amp; Perkiraan Modal HELIX QUADRIGA | Member VIP</title>
 </head>
 <body>
   <main class="main strategy-main">
@@ -21,39 +21,39 @@
         <span>HELIX<small>VIP MEMBER</small></span>
       </a>
       <div class="userbar">
-        <div><div class="user-email" id="strategy-user-email">Memeriksa sesi…</div><span class="role-pill">VIP Member</span></div>
+        <div><div class="user-email" id="strategy-user-email">Memeriksa sesi…</div><span class="role-pill">Member VIP</span></div>
         <span class="avatar" id="strategy-avatar">H</span>
-        <button class="btn btn-quiet" id="strategy-logout" type="button">Logout</button>
+        <button class="btn btn-quiet" id="strategy-logout" type="button">Keluar</button>
       </div>
     </header>
     <div class="content strategy-page">
       <section id="strategy-gate" class="strategy-loading" role="status" aria-live="polite">
         <div class="strategy-spinner" aria-hidden="true"></div>
-        <h2>Memeriksa akses VIP</h2>
-        <p>Halaman ini memerlukan sesi member HELIX.</p>
+        <h2>Memeriksa sesi member</h2>
+        <p>Halaman ini hanya tersedia bagi member HELIX yang sudah masuk.</p>
       </section>
       <section id="strategy-login" class="strategy-auth" hidden>
-        <h2>Masuk ke portal VIP</h2>
-        <p>Data estimator hanya tersedia untuk member HELIX yang sudah login.</p>
-        <a class="btn btn-primary" href="/vip/login/">Login VIP</a>
+        <h2>Masuk ke Portal Member</h2>
+        <p>Data perkiraan hanya tersedia bagi member HELIX yang sudah masuk.</p>
+        <a class="btn btn-primary" href="/vip/login/">Masuk ke Portal Member</a>
       </section>
       <section id="strategy-denied" class="strategy-auth" hidden>
         <h2>Akses member diperlukan</h2>
-        <p>Halaman strategi ini hanya tersedia untuk akun VIP Member.</p>
-        <a class="btn btn-quiet" href="/vip/">Kembali ke portal</a>
+        <p>Halaman strategi ini hanya tersedia untuk akun Member HELIX.</p>
+        <a class="btn btn-quiet" href="/vip/">Kembali ke Portal Member</a>
       </section>
       <section id="strategy-error" class="strategy-error" hidden role="alert">
-        <h2>Data estimator belum dapat dimuat</h2>
+        <h2>Data perkiraan belum dapat dimuat</h2>
         <p id="strategy-error-copy">Periksa koneksi lalu coba lagi.</p>
-        <button class="btn btn-primary" id="strategy-retry" type="button">Coba lagi</button>
+        <button class="btn btn-primary" id="strategy-retry" type="button">Muat ulang</button>
       </section>
 
       <div id="strategy-app" hidden>
         <div class="strategy-heading">
           <div>
-            <div class="eyebrow">HELIX QUADRIGA · STRATEGY</div>
-            <h1>Strategy Performance &amp; Equity Estimator</h1>
-            <p>Ringkasan historis dan simulasi skenario lot untuk periode 1 Januari–20 Oktober 2026.</p>
+            <div class="eyebrow">HELIX QUADRIGA · KINERJA STRATEGI</div>
+            <h1>Performa Strategi &amp; Perkiraan Modal</h1>
+            <p>Ringkasan data historis dan simulasi ukuran lot untuk periode 1 Januari–20 Oktober 2026.</p>
           </div>
           <a class="btn btn-quiet" href="/vip/">← Portal Member</a>
         </div>
@@ -61,54 +61,54 @@
         <aside class="strategy-risk" aria-labelledby="strategy-risk-title">
           <span class="strategy-risk-mark" aria-hidden="true">!</span>
           <div>
-            <h2 id="strategy-risk-title">Peringatan Risiko dan Keterbatasan Simulasi</h2>
-            <p>Informasi pada halaman ini disusun berdasarkan hasil backtest historis dan estimasi skenario strategi HELIX QUADRIGA. Kinerja pada kondisi pasar riil dapat berbeda akibat volatilitas, spread, slippage, likuiditas, spesifikasi kontrak, dan kualitas eksekusi broker. Data profitabilitas, drawdown, serta kebutuhan modal yang ditampilkan bersifat ilustratif dan tidak menjamin keuntungan, tingkat risiko, atau hasil serupa di masa depan. Aktivitas trading mengandung risiko kerugian hingga seluruh modal yang digunakan. Gunakan informasi ini sebagai bahan evaluasi, bukan sebagai jaminan hasil investasi.</p>
+            <h2 id="strategy-risk-title">Peringatan Risiko dan Batasan Perkiraan</h2>
+            <p>Informasi pada halaman ini disusun dari pengujian strategi menggunakan data historis dan perkiraan skenario HELIX QUADRIGA. Kinerja pada pasar nyata dapat berbeda karena perubahan harga, selisih harga jual-beli, keterlambatan atau perbedaan harga eksekusi, ketersediaan likuiditas, ketentuan kontrak, dan mutu layanan broker. Angka laba, penurunan nilai akun, serta kebutuhan modal hanya untuk ilustrasi dan tidak menjamin keuntungan, tingkat risiko, ataupun hasil yang sama di masa depan. Perdagangan dapat menyebabkan hilangnya sebagian atau seluruh modal. Gunakan informasi ini sebagai bahan pertimbangan, bukan jaminan hasil investasi.</p>
           </div>
         </aside>
 
         <section class="strategy-panel" aria-labelledby="strategy-filter-title">
           <div class="strategy-panel-head">
-            <div><h2 id="strategy-filter-title">Atur simulasi</h2><p>Perubahan pilihan memperbarui statistik, grafik, dan tabel. Starting Equity hanya memengaruhi estimasi equity akhir.</p></div>
+            <div><h2 id="strategy-filter-title">Atur simulasi</h2><p>Perubahan pilihan memperbarui statistik, grafik, dan tabel. Modal awal hanya memengaruhi perkiraan modal akhir.</p></div>
           </div>
           <div class="strategy-filter-grid">
-            <div class="strategy-field"><label for="strategy-lot">Lot Size</label><select id="strategy-lot"></select></div>
-            <div class="strategy-field"><label for="strategy-profile">Profile</label><select id="strategy-profile"><option value="SAFE">SAFE · ML + RL</option><option value="MEDIUM">MEDIUM · ML + RL + SHL</option><option value="AGGRESSIVE">AGGRESSIVE / ALL</option><option value="CUSTOM">CUSTOM</option></select></div>
-            <div class="strategy-field"><label for="strategy-families">Family Combination</label><select id="strategy-families"></select></div>
-            <div class="strategy-field"><label for="strategy-equity">Starting Equity (USD)</label><input id="strategy-equity" type="number" min="0" max="1000000000000" step="0.01" value="5000" inputmode="decimal" aria-describedby="strategy-equity-help"><small id="strategy-equity-help" class="strategy-kpi-sub">Modal awal hipotetis; tidak mengubah metrik historis.</small></div>
+            <div class="strategy-field"><label for="strategy-lot">Ukuran Lot</label><select id="strategy-lot"></select></div>
+            <div class="strategy-field"><label for="strategy-profile">Profil</label><select id="strategy-profile"><option value="SAFE">AMAN · ML + RL</option><option value="MEDIUM">MENENGAH · ML + RL + SHL</option><option value="AGGRESSIVE">AGRESIF / SEMUA</option><option value="CUSTOM">PILIHAN SENDIRI</option></select></div>
+            <div class="strategy-field"><label for="strategy-families">Kombinasi Strategi</label><select id="strategy-families"></select></div>
+            <div class="strategy-field"><label for="strategy-equity">Modal Awal (USD)</label><input id="strategy-equity" type="number" min="0" max="1000000000000" step="0.01" value="5000" inputmode="decimal" aria-describedby="strategy-equity-help"><small id="strategy-equity-help" class="strategy-kpi-sub">Modal awal simulasi; tidak mengubah metrik historis.</small></div>
           </div>
-          <div class="strategy-filter-foot"><span id="strategy-active-combo">Kombinasi aktif: ML + RL + SHL + LGL</span><button id="strategy-reset" class="btn btn-quiet strategy-reset" type="button">Reset pilihan</button></div>
+          <div class="strategy-filter-foot"><span id="strategy-active-combo">Kombinasi aktif: ML + RL + SHL + LGL</span><button id="strategy-reset" class="btn btn-quiet strategy-reset" type="button">Atur ulang pilihan</button></div>
           <div id="strategy-notice" class="strategy-notice" aria-live="polite"></div>
         </section>
 
         <section aria-labelledby="strategy-performance-title">
-          <div class="strategy-section-title"><h2 id="strategy-performance-title">Performance &amp; aktivitas</h2><p>Periode historis · USD · broker-time</p></div>
+          <div class="strategy-section-title"><h2 id="strategy-performance-title">Kinerja &amp; aktivitas</h2><p>Periode historis · USD · waktu broker</p></div>
           <div id="strategy-kpis" class="strategy-kpi-groups"></div>
         </section>
 
         <section aria-labelledby="strategy-risk-options-title">
-          <div class="strategy-section-title"><h2 id="strategy-risk-options-title">Recommended Equity</h2><p>Estimasi stress historis, bukan jaminan modal minimum.</p></div>
+          <div class="strategy-section-title"><h2 id="strategy-risk-options-title">Perkiraan Modal yang Disarankan</h2><p>Perkiraan berdasarkan tekanan historis, bukan jaminan modal minimum.</p></div>
           <div id="strategy-options" class="strategy-equity-grid"></div>
         </section>
 
         <section class="strategy-panel" aria-labelledby="strategy-chart-title">
-          <div class="strategy-panel-head"><div><h2 id="strategy-chart-title">Cumulative Net PnL (USD)</h2><p>Grafik memuat seluruh 293 hari kalender. Hari tanpa posisi tertutup mempertahankan nilai kumulatif.</p></div><span class="strategy-chart-total" id="strategy-chart-total">—</span></div>
+          <div class="strategy-panel-head"><div><h2 id="strategy-chart-title">Akumulasi Laba/Rugi Bersih (USD)</h2><p>Grafik mencakup seluruh 293 hari kalender. Hari tanpa transaksi tertutup mempertahankan nilai akumulasi.</p></div><span class="strategy-chart-total" id="strategy-chart-total">—</span></div>
           <div class="strategy-chart-card">
-            <div class="strategy-chart-top"><span id="strategy-chart-period">01 Jan 2026 — 20 Oct 2026</span><span>Family: <strong id="strategy-chart-family">ALL</strong></span></div>
+            <div class="strategy-chart-top"><span id="strategy-chart-period">01 Jan 2026 — 20 Okt 2026</span><span>Strategi: <strong id="strategy-chart-family">SEMUA</strong></span></div>
             <div id="strategy-chart-stage" class="strategy-chart-stage"></div>
             <div id="strategy-chart-tooltip" class="strategy-chart-tooltip" role="status" aria-live="polite"></div>
-            <div class="strategy-chart-legend"><span><i></i>Cumulative Net PnL</span></div>
+            <div class="strategy-chart-legend"><span><i></i>Akumulasi laba/rugi bersih</span></div>
           </div>
-          <p class="strategy-reference-note">Win Rate, Profit Factor, Peak Open, dan Net Pips merujuk pada eksekusi historis family-tagged 0,01 lot. Setiap kombinasi family tidak merupakan backtest mandiri.</p>
+          <p class="strategy-reference-note">Tingkat Kemenangan, Faktor Profit, Posisi Terbuka Bersamaan, dan Pips Bersih mengacu pada transaksi historis berlabel strategi dengan ukuran 0,01 lot. Setiap kombinasi strategi bukan hasil uji historis mandiri.</p>
         </section>
 
         <section class="strategy-panel" aria-labelledby="strategy-table-title">
-          <div class="strategy-panel-head"><div><h2 id="strategy-table-title">Ringkasan harian</h2><p>Net closed-trade PnL per tanggal broker. Mingguan mengikuti Minggu–Sabtu; nilai mingguan/bulanan diulang pada setiap baris periode.</p></div></div>
+          <div class="strategy-panel-head"><div><h2 id="strategy-table-title">Ringkasan Harian</h2><p>Laba/rugi bersih transaksi tertutup menurut tanggal broker. Periode mingguan mengikuti Minggu–Sabtu; nilai mingguan dan bulanan diulang pada setiap baris dalam periode tersebut.</p></div></div>
           <div id="strategy-table-container"></div>
         </section>
       </div>
     </div>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script defer src="/vip/strategy-estimator.js?v=20261023-r2"></script>
+  <script defer src="/vip/strategy-estimator.js?v=20261023-r3"></script>
 </body>
 </html>

@@ -10,8 +10,8 @@
   const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const NUMBER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
   const PIPS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
-  const DAY_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: 'UTC' });
-  const SHORT_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', timeZone: 'UTC' });
+  const DAY_DATE = new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const SHORT_DATE = new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', timeZone: 'UTC' });
   const sb = supabase.createClient('https://wouwoefzghecuiknznvs.supabase.co', 'sb_publishable_FDLLBcmYFGiS9PDbyvgDtQ_UWUB8fUc');
   let session = null;
   let currentData = null;
@@ -27,6 +27,8 @@
   const signedMoney = value => Number.isFinite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : ''}${USD.format(Math.abs(value))}` : '—';
   const familiesKey = families => families.join('+');
   const comboLabel = families => families.join(' + ');
+  const familyLabel = families => families.join(' + ');
+  const weekdayLabel = value => ({ Monday: 'Senin', Tuesday: 'Selasa', Wednesday: 'Rabu', Thursday: 'Kamis', Friday: 'Jumat', Saturday: 'Sabtu', Sunday: 'Minggu' })[value] || value;
   const statusClass = status => status === 'NEGATIVE' ? 'negative' : status === 'NO TRADE' ? 'no-trade' : status === 'FLAT' ? 'flat' : '';
   const dateObject = iso => new Date(`${iso}T00:00:00Z`);
 
@@ -38,8 +40,8 @@
     $('#strategy-lot').innerHTML = LOTS.map(lot => `<option value="${lot}">${lot}</option>`).join('');
     $('#strategy-families').innerHTML = COMBINATIONS.map(families => {
       const name = familiesKey(families);
-      const countLabel = `${families.length} ${families.length === 1 ? 'logic' : 'logic'}`;
-      const label = families.length === 4 ? `${countLabel} · ${name} · ALL` : `${countLabel} · ${comboLabel(families)}`;
+      const countLabel = `${families.length} strategi`;
+      const label = families.length === 4 ? `${countLabel} · ${name} · SEMUA` : `${countLabel} · ${comboLabel(families)}`;
       return `<option value="${name}">${escapeHtml(label)}</option>`;
     }).join('');
     $('#strategy-lot').value = '0.01';
@@ -53,7 +55,7 @@
     const url = new URL('/vip/api/member/strategy-estimator', location.origin);
     url.searchParams.set('lot', lot);
     url.searchParams.set('families', families.join(','));
-    $('#strategy-notice').textContent = 'Memperbarui hasil berdasarkan workbook…';
+    $('#strategy-notice').textContent = 'Memperbarui hasil berdasarkan data acuan…';
     try {
       const result = await fetch(url, { headers: { authorization: `Bearer ${session.access_token}`, accept: 'application/json' }, cache: 'no-store' });
       const body = await result.json();
@@ -61,9 +63,9 @@
       if (sequence !== requestSequence) return;
       currentData = body;
       tablePage = 1;
-      $('#strategy-active-combo').textContent = `Kombinasi aktif: ${comboLabel(body.families)} · Lot ${body.lot}`;
-      $('#strategy-chart-family').textContent = body.combination === 'ALL' ? 'ALL' : body.combination;
-      $('#strategy-notice').textContent = `Mode ${$('#strategy-profile').selectedOptions[0].textContent} · statistik historis terkalibrasi dari eksekusi family-tagged.`;
+      $('#strategy-active-combo').textContent = `Kombinasi aktif: ${familyLabel(body.families)} · Ukuran lot ${body.lot}`;
+      $('#strategy-chart-family').textContent = body.combination === 'ALL' ? 'SEMUA' : body.combination;
+      $('#strategy-notice').textContent = `Mode ${$('#strategy-profile').selectedOptions[0].textContent} · statistik historis diselaraskan dengan transaksi berlabel strategi.`;
       renderResults();
     } catch (error) {
       if (sequence !== requestSequence) return;
@@ -81,37 +83,37 @@
     equityInput.setAttribute('aria-invalid', String(!equityValid));
     const ending = equityValid ? startEquity + d.performance.netPnlUsd : null;
     const metrics = [
-      ['Win Rate', `${(d.performance.winRate * 100).toFixed(2)}%`, 'Eksekusi historis family-tagged · 0,01 lot', 'reference'],
-      ['Profit Factor', NUMBER.format(d.performance.profitFactor), 'Eksekusi historis family-tagged · 0,01 lot', 'reference'],
-      ['Net Pips', PIPS.format(d.performance.netPips), 'Acuan pips 0,01 lot · bukan hasil hitung ulang per lot', 'reference'],
-      ['Net PnL (USD)', signedMoney(d.performance.netPnlUsd), 'Estimasi kombinasi dan lot yang dipilih', d.performance.netPnlUsd >= 0 ? 'positive' : 'negative'],
-      ['Starting Equity', equityValid ? money(startEquity) : '—', 'Nilai simulasi yang Anda pilih'],
-      ['Estimated Ending Equity', equityValid ? money(ending) : '—', 'Starting Equity + Net PnL simulasi; bukan saldo akun live', 'positive'],
-      ['Peak Open', whole(d.performance.peakOpen), 'Tumpang tindih posisi maksimum · historis 0,01 lot', 'reference'],
-      ['Closed Trades', whole(d.performance.closedTrades), 'Trade tertutup dalam kombinasi aktif'],
-      ['Win Trades', whole(d.performance.wins), 'Hasil tertutup positif menurut histori 0,01 lot'],
-      ['Loss Trades', whole(d.performance.losses), 'Hasil tertutup negatif menurut histori 0,01 lot'],
-      ['Days With Close', whole(d.performance.daysWithClose), 'Dari seluruh 293 hari kalender'],
-      ['Positive Days', whole(d.performance.positiveDays), 'Hari bertanggal dengan net closed PnL positif'],
-      ['Negative Days', whole(d.performance.negativeDays), 'Hari bertanggal dengan net closed PnL negatif'],
-      ['Best Day PnL', signedMoney(d.dailyRisk.bestDay?.pnlUsd), d.dailyRisk.bestDay ? DAY_DATE.format(dateObject(d.dailyRisk.bestDay.date)) : '—', 'positive'],
-      ['Worst Day PnL', signedMoney(d.dailyRisk.worstDay?.pnlUsd), d.dailyRisk.worstDay ? DAY_DATE.format(dateObject(d.dailyRisk.worstDay.date)) : '—', 'negative'],
-      ['Consecutive Loss Days (Max)', whole(d.dailyRisk.maxConsecutiveLossDays), 'Hari tanpa trade diabaikan; hari close dengan net nol mereset streak'],
-      ['Worst Consecutive Losing-Day PnL', signedMoney(d.dailyRisk.worstConsecutiveLossPnlUsd), 'Kerugian net terakumulasi pada rangkaian loss terburuk', 'negative'],
+      ['Tingkat Kemenangan', `${(d.performance.winRate * 100).toFixed(2)}%`, 'Transaksi historis berlabel strategi · 0,01 lot', 'reference'],
+      ['Faktor Profit', NUMBER.format(d.performance.profitFactor), 'Transaksi historis berlabel strategi · 0,01 lot', 'reference'],
+      ['Pips Bersih', PIPS.format(d.performance.netPips), 'Acuan 0,01 lot · tidak dihitung ulang per ukuran lot', 'reference'],
+      ['Laba/Rugi Bersih (USD)', signedMoney(d.performance.netPnlUsd), 'Perkiraan kombinasi dan ukuran lot terpilih', d.performance.netPnlUsd >= 0 ? 'positive' : 'negative'],
+      ['Modal Awal', equityValid ? money(startEquity) : '—', 'Nilai simulasi pilihan Anda'],
+      ['Perkiraan Modal Akhir', equityValid ? money(ending) : '—', 'Modal awal + laba/rugi simulasi; bukan saldo akun aktif', 'positive'],
+      ['Posisi Terbuka Bersamaan', whole(d.performance.peakOpen), 'Jumlah maksimum bersamaan · histori 0,01 lot', 'reference'],
+      ['Transaksi Ditutup', whole(d.performance.closedTrades), 'Transaksi ditutup dalam kombinasi terpilih'],
+      ['Transaksi Untung', whole(d.performance.wins), 'Hasil positif menurut histori 0,01 lot'],
+      ['Transaksi Rugi', whole(d.performance.losses), 'Hasil negatif menurut histori 0,01 lot'],
+      ['Hari dengan Transaksi Ditutup', whole(d.performance.daysWithClose), 'Dari seluruh 293 hari kalender'],
+      ['Hari Untung', whole(d.performance.positiveDays), 'Hari dengan laba/rugi bersih positif'],
+      ['Hari Rugi', whole(d.performance.negativeDays), 'Hari dengan laba/rugi bersih negatif'],
+      ['Laba/Rugi Harian Terbaik', signedMoney(d.dailyRisk.bestDay?.pnlUsd), d.dailyRisk.bestDay ? DAY_DATE.format(dateObject(d.dailyRisk.bestDay.date)) : '—', 'positive'],
+      ['Laba/Rugi Harian Terburuk', signedMoney(d.dailyRisk.worstDay?.pnlUsd), d.dailyRisk.worstDay ? DAY_DATE.format(dateObject(d.dailyRisk.worstDay.date)) : '—', 'negative'],
+      ['Hari Rugi Berturut-turut (Maks.)', whole(d.dailyRisk.maxConsecutiveLossDays), 'Hari tanpa transaksi diabaikan; hasil nol mengakhiri rentetan rugi'],
+      ['Kerugian Terbesar dalam Rentetan', signedMoney(d.dailyRisk.worstConsecutiveLossPnlUsd), 'Akumulasi rugi bersih pada rentetan hari rugi terburuk', 'negative'],
     ];
-    const groups = [['Performance', metrics.slice(0, 6)], ['Trading Activity', metrics.slice(6, 11)], ['Daily Risk', metrics.slice(11)]];
-    const card = ([label, value, sub, kind]) => `<article class="strategy-kpi"><span class="strategy-kpi-label">${escapeHtml(label)}${kind === 'reference' ? '<span class="tip" title="Mengacu pada eksekusi historis family-tagged 0,01 lot, sesuai workbook.">i</span>' : ''}</span><strong class="strategy-kpi-value ${kind === 'positive' ? 'positive' : kind === 'negative' ? 'negative' : ''}">${escapeHtml(value)}</strong><small class="strategy-kpi-sub">${escapeHtml(sub)}</small></article>`;
+    const groups = [['Kinerja', metrics.slice(0, 6)], ['Aktivitas Transaksi', metrics.slice(6, 11)], ['Risiko Harian', metrics.slice(11)]];
+    const card = ([label, value, sub, kind]) => `<article class="strategy-kpi"><span class="strategy-kpi-label">${escapeHtml(label)}${kind === 'reference' ? '<span class="tip" title="Mengacu pada data historis berlabel strategi dengan ukuran 0,01 lot.">i</span>' : ''}</span><strong class="strategy-kpi-value ${kind === 'positive' ? 'positive' : kind === 'negative' ? 'negative' : ''}">${escapeHtml(value)}</strong><small class="strategy-kpi-sub">${escapeHtml(sub)}</small></article>`;
     $('#strategy-kpis').innerHTML = groups.map(([title, items]) => `<section class="strategy-kpi-group"><h3>${title}</h3><div class="strategy-kpi-grid">${items.map(card).join('')}</div></section>`).join('');
   }
 
   function renderEquityOptions() {
     const values = currentData.recommendedEquity;
     const cards = [
-      ['OPT1', 'Equity DD & Margin Stress', values.opt1, 'Memperhitungkan drawdown dan paparan posisi simultan pada histori, ditambah buffer model.', 'Estimasi ini memakai drawdown historis family-tagged, puncak posisi terbuka, dan asumsi stress workbook. Nilai aktual bergantung pada kondisi pasar dan broker.'],
-      ['OPT2', 'Consecutive Loss Stress', values.opt2, 'Menggunakan akumulasi kerugian pada rangkaian hari loss terburuk, serta margin dan buffer model.', 'Hari tanpa trade dilewati. Hari dengan posisi tertutup dan hasil nol memutus rangkaian loss. Ini bukan jumlah hari loss dikali rata-rata kerugian.'],
-      ['OPT3', 'Worst Daily Loss Stress', values.opt3, 'Menggunakan kerugian net terbesar dalam satu hari bertanggal, serta margin dan buffer model.', 'Perkiraan didasarkan pada hari terburuk dari data historis kombinasi aktif. Kebutuhan margin nyata dapat berubah menurut spesifikasi broker dan harga.'],
+      ['OPT1', 'Tekanan Penurunan Modal & Margin', values.opt1, 'Memperhitungkan penurunan modal dan paparan posisi bersamaan pada histori, ditambah cadangan model.', 'Estimasi memakai penurunan modal historis, puncak posisi terbuka, dan asumsi tekanan pada data acuan. Nilai aktual bergantung pada kondisi pasar dan broker.'],
+      ['OPT2', 'Tekanan Rentetan Hari Rugi', values.opt2, 'Menggunakan akumulasi kerugian pada rentetan hari rugi terburuk, serta margin dan cadangan model.', 'Hari tanpa transaksi dilewati. Hari dengan hasil nol mengakhiri rentetan rugi. Nilai ini bukan jumlah hari rugi dikalikan rata-rata kerugian.'],
+      ['OPT3', 'Tekanan Kerugian Harian Terburuk', values.opt3, 'Menggunakan kerugian bersih terbesar dalam satu hari, serta margin dan cadangan model.', 'Perkiraan didasarkan pada hari terburuk dalam data historis kombinasi aktif. Kebutuhan margin nyata dapat berubah menurut spesifikasi broker dan harga.'],
     ];
-    $('#strategy-options').innerHTML = cards.map(([opt, title, value, copy, detail]) => `<article class="strategy-equity"><span class="opt">${opt}</span><h3>${escapeHtml(title)}</h3><strong>${money(value)}</strong><p>${escapeHtml(copy)}</p><details><summary>Cara membaca estimasi</summary><p>${escapeHtml(detail)}</p></details></article>`).join('');
+    $('#strategy-options').innerHTML = cards.map(([opt, title, value, copy, detail]) => `<article class="strategy-equity"><span class="opt">${opt}</span><h3>${escapeHtml(title)}</h3><strong>${money(value)}</strong><p>${escapeHtml(copy)}</p><details><summary>Cara memahami perkiraan</summary><p>${escapeHtml(detail)}</p></details></article>`).join('');
   }
 
   function chartGeometry(rows) {
@@ -142,7 +144,7 @@
     const g = chartGeometry(rows);
     const grid = g.ticks.map(value => `<line class="strategy-chart-grid" x1="${g.left}" x2="${g.right}" y1="${g.y(value)}" y2="${g.y(value)}"></line><text x="${g.left - 10}" y="${g.y(value) + 4}" text-anchor="end">${escapeHtml(g.currencyAxis(value))}</text>`).join('');
     const dates = g.axisIndices.map(index => `<text x="${g.points[index].x}" y="${g.bottom + 23}" text-anchor="${index === 0 ? 'start' : index === g.points.length - 1 ? 'end' : 'middle'}">${SHORT_DATE.format(dateObject(rows[index].date))}</text>`).join('');
-    $('#strategy-chart-stage').innerHTML = `<svg class="strategy-chart-svg" viewBox="0 0 ${g.width} ${g.height}" role="img" aria-label="Grafik kumulatif Net PnL harian dari ${rows[0].date} sampai ${rows.at(-1).date}. Gunakan panah kiri atau kanan untuk meninjau titik harian." tabindex="0"><defs><linearGradient id="strategyFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#55d5b0" stop-opacity=".18"></stop><stop offset="1" stop-color="#55d5b0" stop-opacity=".01"></stop></linearGradient></defs>${grid}<line class="strategy-chart-axis" x1="${g.left}" x2="${g.right}" y1="${g.bottom}" y2="${g.bottom}"></line><path class="strategy-chart-fill" d="${g.fillPath}"></path><path class="strategy-chart-line" d="${g.linePath}"></path>${dates}<g id="strategy-chart-focus" style="display:none"><line id="strategy-focus-line" class="strategy-chart-focus" y1="${g.top}" y2="${g.bottom}"></line><circle id="strategy-focus-ring" class="strategy-chart-dot-ring" r="6"></circle><circle id="strategy-focus-dot" class="strategy-chart-dot" r="2.2"></circle></g></svg>`;
+    $('#strategy-chart-stage').innerHTML = `<svg class="strategy-chart-svg" viewBox="0 0 ${g.width} ${g.height}" role="img" aria-label="Grafik akumulasi laba/rugi bersih harian dari ${rows[0].date} sampai ${rows.at(-1).date}. Gunakan tombol panah kiri atau kanan untuk meninjau titik harian." tabindex="0"><defs><linearGradient id="strategyFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#55d5b0" stop-opacity=".18"></stop><stop offset="1" stop-color="#55d5b0" stop-opacity=".01"></stop></linearGradient></defs>${grid}<line class="strategy-chart-axis" x1="${g.left}" x2="${g.right}" y1="${g.bottom}" y2="${g.bottom}"></line><path class="strategy-chart-fill" d="${g.fillPath}"></path><path class="strategy-chart-line" d="${g.linePath}"></path>${dates}<g id="strategy-chart-focus" style="display:none"><line id="strategy-focus-line" class="strategy-chart-focus" y1="${g.top}" y2="${g.bottom}"></line><circle id="strategy-focus-ring" class="strategy-chart-dot-ring" r="6"></circle><circle id="strategy-focus-dot" class="strategy-chart-dot" r="2.2"></circle></g></svg>`;
     $('#strategy-chart-total').textContent = signedMoney(currentData.performance.netPnlUsd);
     const svg = $('.strategy-chart-svg');
     const focus = $('#strategy-chart-focus');
@@ -159,7 +161,7 @@
         $(selector).setAttribute('cy', point.y);
       }
       const pnlClass = point.pnlUsd > 0 ? 'up' : point.pnlUsd < 0 ? 'down' : '';
-      tooltip.innerHTML = `<div class="strategy-tooltip-date">${DAY_DATE.format(dateObject(point.date))} · ${escapeHtml(point.day)}</div><div class="strategy-tooltip-row"><span>Net PnL hari ini</span><strong class="${pnlClass}">${signedMoney(point.pnlUsd)}</strong></div><div class="strategy-tooltip-row"><span>Cumulative PnL</span><strong>${signedMoney(point.cumulativePnlUsd)}</strong></div><div class="strategy-tooltip-row"><span>Kombinasi</span><strong>${escapeHtml(currentData.combination === 'ALL' ? 'ALL' : comboLabel(currentData.families))}</strong></div>`;
+      tooltip.innerHTML = `<div class="strategy-tooltip-date">${DAY_DATE.format(dateObject(point.date))} · ${escapeHtml(weekdayLabel(point.day))}</div><div class="strategy-tooltip-row"><span>Laba/rugi hari ini</span><strong class="${pnlClass}">${signedMoney(point.pnlUsd)}</strong></div><div class="strategy-tooltip-row"><span>Akumulasi laba/rugi</span><strong>${signedMoney(point.cumulativePnlUsd)}</strong></div><div class="strategy-tooltip-row"><span>Kombinasi strategi</span><strong>${escapeHtml(currentData.combination === 'ALL' ? 'SEMUA' : familyLabel(currentData.families))}</strong></div>`;
       tooltip.classList.add('visible');
       const cardRect = card.getBoundingClientRect();
       const screen = svg.createSVGPoint(); screen.x = point.x; screen.y = point.y;
@@ -189,11 +191,12 @@
     const pages = Math.max(1, Math.ceil(allRows.length / perPage));
     tablePage = Math.max(1, Math.min(tablePage, pages));
     const rows = allRows.slice((tablePage - 1) * perPage, tablePage * perPage);
-    const columns = ['Date', 'Day', 'Win', 'Loss', 'Closed Trades', 'Win Rate', 'PnL USD', 'Cumulative PnL USD', 'Day Status', 'Weekly PnL', 'Week Status', 'Monthly PnL', 'Month Status'];
+    const columns = ['Tanggal', 'Hari', 'Untung', 'Rugi', 'Transaksi Ditutup', 'Tingkat Kemenangan', 'Laba/Rugi (USD)', 'Akumulasi (USD)', 'Status Harian', 'Laba/Rugi Mingguan', 'Status Mingguan', 'Laba/Rugi Bulanan', 'Status Bulanan'];
     const cellMoney = value => `<span class="${value > 0 ? 'up' : value < 0 ? 'down' : 'muted'}">${signedMoney(value)}</span>`;
-    const badge = value => `<span class="strategy-status ${statusClass(value)}">${escapeHtml(value)}</span>`;
-    const body = rows.map(row => `<tr><td>${row.date}</td><td>${escapeHtml(row.day)}</td><td>${whole(row.wins)}</td><td>${whole(row.losses)}</td><td>${whole(row.closedTrades)}</td><td>${row.winRate == null ? '—' : `${(row.winRate * 100).toFixed(1)}%`}</td><td>${cellMoney(row.pnlUsd)}</td><td>${cellMoney(row.cumulativePnlUsd)}</td><td>${badge(row.dayStatus)}</td><td>${cellMoney(row.weeklyPnlUsd)}</td><td>${badge(row.weekStatus)}</td><td>${cellMoney(row.monthlyPnlUsd)}</td><td>${badge(row.monthStatus)}</td></tr>`).join('');
-    $('#strategy-table-container').innerHTML = `<div class="strategy-table-shell"><table class="strategy-table"><thead><tr>${columns.map((column, index) => `<th scope="col">${index === 0 ? `<button class="strategy-date-sort" type="button" id="strategy-date-sort" aria-label="Urutkan tanggal">${column} ${sortDescending ? '↓' : '↑'}</button>` : column}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div><div class="strategy-table-tools"><span>Menampilkan ${(tablePage - 1) * perPage + 1}–${Math.min(tablePage * perPage, allRows.length)} dari ${allRows.length} hari</span><div class="controls"><button class="btn btn-quiet" id="strategy-prev" type="button" ${tablePage <= 1 ? 'disabled' : ''}>Sebelumnya</button><span>Halaman ${tablePage} / ${pages}</span><button class="btn btn-quiet" id="strategy-next" type="button" ${tablePage >= pages ? 'disabled' : ''}>Berikutnya</button></div></div>`;
+    const translateStatus = value => ({ 'NO TRADE': 'Tanpa transaksi', FLAT: 'Impas', NEGATIVE: 'Rugi', POSITIVE: 'Untung' })[value] || value;
+    const badge = value => `<span class="strategy-status ${statusClass(value)}">${escapeHtml(translateStatus(value))}</span>`;
+    const body = rows.map(row => `<tr><td>${row.date}</td><td>${escapeHtml(weekdayLabel(row.day))}</td><td>${whole(row.wins)}</td><td>${whole(row.losses)}</td><td>${whole(row.closedTrades)}</td><td>${row.winRate == null ? '—' : `${(row.winRate * 100).toFixed(1)}%`}</td><td>${cellMoney(row.pnlUsd)}</td><td>${cellMoney(row.cumulativePnlUsd)}</td><td>${badge(row.dayStatus)}</td><td>${cellMoney(row.weeklyPnlUsd)}</td><td>${badge(row.weekStatus)}</td><td>${cellMoney(row.monthlyPnlUsd)}</td><td>${badge(row.monthStatus)}</td></tr>`).join('');
+    $('#strategy-table-container').innerHTML = `<div class="strategy-table-shell"><table class="strategy-table"><thead><tr>${columns.map((column, index) => `<th scope="col">${index === 0 ? `<button class="strategy-date-sort" type="button" id="strategy-date-sort" aria-label="Urutkan tanggal">${column} ${sortDescending ? '↓' : '↑'}</button>` : column}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div><div class="strategy-table-tools"><span>Menampilkan ${(tablePage - 1) * perPage + 1}–${Math.min(tablePage * perPage, allRows.length)} dari ${allRows.length} hari</span><div class="controls"><button class="btn btn-quiet" id="strategy-prev" type="button" ${tablePage <= 1 ? 'disabled' : ''}>Sebelumnya</button><span>Halaman ${tablePage} dari ${pages}</span><button class="btn btn-quiet" id="strategy-next" type="button" ${tablePage >= pages ? 'disabled' : ''}>Berikutnya</button></div></div>`;
     $('#strategy-date-sort').addEventListener('click', () => { sortDescending = !sortDescending; tablePage = 1; renderTable(); });
     $('#strategy-prev').addEventListener('click', () => { tablePage--; renderTable(); });
     $('#strategy-next').addEventListener('click', () => { tablePage++; renderTable(); });
@@ -215,7 +218,7 @@
   function applyProfile(profile) {
     if (profile === 'CUSTOM') return;
     $('#strategy-families').value = familiesKey(PRESETS[profile]);
-    $('#strategy-active-combo').textContent = `Kombinasi aktif: ${comboLabel(PRESETS[profile])}`;
+    $('#strategy-active-combo').textContent = `Kombinasi aktif: ${familyLabel(PRESETS[profile])}`;
     requestEstimator();
   }
 

@@ -159,10 +159,26 @@ test('authenticated estimator API denies anonymous and admin sessions and accept
 
 test('page contains mandatory risk copy and source dataset is not a public asset', async () => {
   const page = await readFile(new URL('../public/vip/materials/strategy/helix-quadriga-estimator/index.html', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../public/vip/strategy-estimator.css', import.meta.url), 'utf8');
+  const js = await readFile(new URL('../public/vip/strategy-estimator.js', import.meta.url), 'utf8');
   const api = await readFile(new URL('../functions/vip/api/[[path]].js', import.meta.url), 'utf8');
   assert.ok(page.indexOf('Peringatan Risiko dan Keterbatasan Simulasi') < page.indexOf('Atur simulasi'));
-  assert.ok(page.includes('hingga seluruh modal yang digunakan'));
+  assert.ok(page.includes('Performa Strategi &amp; Perkiraan Modal'));
+  assert.ok(page.includes('Modal Awal (USD)'));
+  assert.ok(page.includes('Perdagangan dapat menyebabkan hilangnya sebagian atau seluruh modal'));
+  assert.ok(css.includes('.strategy-page [hidden]{display:none!important}'));
+  assert.ok(js.includes("['Tingkat Kemenangan'"));
+  assert.ok(js.includes("'Tanpa transaksi'"));
+  assert.ok(js.includes("'1 strategi'" ) || js.includes("`${families.length} strategi`"));
   assert.ok(api.includes('MEMBER_ACCESS_REQUIRED'));
   assert.ok(!page.includes('OPT4'));
   await assert.rejects(access(new URL('../public/vip/strategy-estimator-source.js', import.meta.url)));
+});
+
+test('Admin Material form explains the HTTPS link field for create and edit', async () => {
+  const admin = await readFile(new URL('../public/vip/admin/index.html', import.meta.url), 'utf8');
+  assert.match(admin, /function addMaterialLinkHint\(form\)/);
+  assert.match(admin, /Masukkan tautan halaman atau berkas pada kolom ini, bukan pada Deskripsi/);
+  assert.match(admin, /previousMaterialModal/);
+  assert.match(admin, /previousMaterialEdit/);
 });
