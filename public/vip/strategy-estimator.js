@@ -233,13 +233,12 @@
       $('#strategy-avatar').textContent = (session.user.email || 'H').slice(0, 1).toUpperCase();
       const roleResult = await sb.rpc('helix_current_role');
       if (roleResult.error || roleResult.data !== 'member') { showGate('strategy-denied'); return; }
-      $('#strategy-app').hidden = false;
+      showGate('strategy-app');
       renderFamilyOptions();
       await requestEstimator();
   }
 
   async function verifySession() {
-    showGate('strategy-gate');
     if (sessionCheckStarted) return;
     sessionCheckStarted = true;
     let finished = false;

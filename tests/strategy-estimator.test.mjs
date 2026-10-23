@@ -165,8 +165,10 @@ test('page contains mandatory risk copy and source dataset is not a public asset
   assert.ok(page.indexOf('Peringatan Risiko dan Keterbatasan Simulasi') < page.indexOf('Atur simulasi'));
   assert.ok(page.includes('Performa Strategi &amp; Perkiraan Modal'));
   assert.ok(page.includes('Modal Awal (USD)'));
+  assert.match(page, /id="strategy-gate"[^>]*hidden/);
   assert.ok(page.includes('Perdagangan dapat menyebabkan hilangnya sebagian atau seluruh modal'));
   assert.ok(css.includes('.strategy-page [hidden]{display:none!important}'));
+  assert.ok(js.includes("showGate('strategy-app')"));
   assert.ok(js.includes("['Tingkat Kemenangan'"));
   assert.ok(js.includes("'Tanpa transaksi'"));
   assert.ok(js.includes("'1 strategi'" ) || js.includes("`${families.length} strategi`"));
