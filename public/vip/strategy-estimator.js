@@ -5,7 +5,8 @@
   const FAMILIES = ['ML', 'RL', 'SHL', 'LGL'];
   const LOTS = ['0.01', '0.02', '0.03', '0.05', '0.10', '0.20', '0.30', '0.50', '1.00', '2.00', '3.00', '5.00'];
   const PRESETS = { SAFE: ['ML', 'RL'], MEDIUM: ['ML', 'RL', 'SHL'], AGGRESSIVE: [...FAMILIES] };
-  const COMBINATIONS = Array.from({ length: 16 }, (_, mask) => FAMILIES.filter((_, index) => mask & (1 << index))).filter(value => value.length);
+  const COMBINATIONS = Array.from({ length: 16 }, (_, mask) => FAMILIES.filter((_, index) => mask & (1 << index))).filter(value => value.length)
+    .sort((a, b) => a.length - b.length || FAMILIES.indexOf(a[0]) - FAMILIES.indexOf(b[0]) || a.map(f => FAMILIES.indexOf(f)).join('').localeCompare(b.map(f => FAMILIES.indexOf(f)).join('')));
   const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const NUMBER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
   const PIPS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
@@ -18,6 +19,7 @@
   let tablePage = 1;
   let sortDescending = false;
   let chartActiveIndex = 0;
+  let sessionCheckStarted = false;
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   const money = value => Number.isFinite(value) ? USD.format(value) : '—';
@@ -36,7 +38,8 @@
     $('#strategy-lot').innerHTML = LOTS.map(lot => `<option value="${lot}">${lot}</option>`).join('');
     $('#strategy-families').innerHTML = COMBINATIONS.map(families => {
       const name = familiesKey(families);
-      const label = families.length === 4 ? `${name} · ALL` : comboLabel(families);
+      const countLabel = `${families.length} ${families.length === 1 ? 'logic' : 'logic'}`;
+      const label = families.length === 4 ? `${countLabel} · ${name} · ALL` : `${countLabel} · ${comboLabel(families)}`;
       return `<option value="${name}">${escapeHtml(label)}</option>`;
     }).join('');
     $('#strategy-lot').value = '0.01';
@@ -112,7 +115,7 @@
   }
 
   function chartGeometry(rows) {
-    const width = 1080, height = 360, left = 76, right = 1052, top = 23, bottom = 305;
+    const width = 960, height = 270, left = 76, right = 936, top = 18, bottom = 224;
     const values = rows.map(row => row.cumulativePnlUsd);
     let min = Math.min(0, ...values), max = Math.max(0, ...values);
     if (min === max) { min -= 1; max += 1; }
@@ -138,8 +141,8 @@
     const rows = currentData.daily;
     const g = chartGeometry(rows);
     const grid = g.ticks.map(value => `<line class="strategy-chart-grid" x1="${g.left}" x2="${g.right}" y1="${g.y(value)}" y2="${g.y(value)}"></line><text x="${g.left - 10}" y="${g.y(value) + 4}" text-anchor="end">${escapeHtml(g.currencyAxis(value))}</text>`).join('');
-    const dates = g.axisIndices.map(index => `<text x="${g.points[index].x}" y="${g.bottom + 30}" text-anchor="${index === 0 ? 'start' : index === g.points.length - 1 ? 'end' : 'middle'}">${SHORT_DATE.format(dateObject(rows[index].date))}</text>`).join('');
-    $('#strategy-chart-stage').innerHTML = `<svg class="strategy-chart-svg" viewBox="0 0 ${g.width} ${g.height}" role="img" aria-label="Grafik kumulatif Net PnL harian dari ${rows[0].date} sampai ${rows.at(-1).date}. Gunakan panah kiri atau kanan untuk meninjau titik harian." tabindex="0"><defs><linearGradient id="strategyFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#55d5b0" stop-opacity=".22"></stop><stop offset="1" stop-color="#55d5b0" stop-opacity=".005"></stop></linearGradient></defs>${grid}<line class="strategy-chart-axis" x1="${g.left}" x2="${g.right}" y1="${g.bottom}" y2="${g.bottom}"></line><path class="strategy-chart-fill" d="${g.fillPath}"></path><path class="strategy-chart-line" d="${g.linePath}"></path>${dates}<g id="strategy-chart-focus" style="display:none"><line id="strategy-focus-line" class="strategy-chart-focus" y1="${g.top}" y2="${g.bottom}"></line><circle id="strategy-focus-ring" class="strategy-chart-dot-ring" r="6"></circle><circle id="strategy-focus-dot" class="strategy-chart-dot" r="2.2"></circle></g></svg>`;
+    const dates = g.axisIndices.map(index => `<text x="${g.points[index].x}" y="${g.bottom + 23}" text-anchor="${index === 0 ? 'start' : index === g.points.length - 1 ? 'end' : 'middle'}">${SHORT_DATE.format(dateObject(rows[index].date))}</text>`).join('');
+    $('#strategy-chart-stage').innerHTML = `<svg class="strategy-chart-svg" viewBox="0 0 ${g.width} ${g.height}" role="img" aria-label="Grafik kumulatif Net PnL harian dari ${rows[0].date} sampai ${rows.at(-1).date}. Gunakan panah kiri atau kanan untuk meninjau titik harian." tabindex="0"><defs><linearGradient id="strategyFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#55d5b0" stop-opacity=".18"></stop><stop offset="1" stop-color="#55d5b0" stop-opacity=".01"></stop></linearGradient></defs>${grid}<line class="strategy-chart-axis" x1="${g.left}" x2="${g.right}" y1="${g.bottom}" y2="${g.bottom}"></line><path class="strategy-chart-fill" d="${g.fillPath}"></path><path class="strategy-chart-line" d="${g.linePath}"></path>${dates}<g id="strategy-chart-focus" style="display:none"><line id="strategy-focus-line" class="strategy-chart-focus" y1="${g.top}" y2="${g.bottom}"></line><circle id="strategy-focus-ring" class="strategy-chart-dot-ring" r="6"></circle><circle id="strategy-focus-dot" class="strategy-chart-dot" r="2.2"></circle></g></svg>`;
     $('#strategy-chart-total').textContent = signedMoney(currentData.performance.netPnlUsd);
     const svg = $('.strategy-chart-svg');
     const focus = $('#strategy-chart-focus');
@@ -220,11 +223,8 @@
     if (currentData) renderKpis();
   }
 
-  async function verifySession() {
-    showGate('strategy-gate');
-    try {
-      const result = await sb.auth.getSession();
-      session = result.data?.session || null;
+  async function acceptSession(nextSession) {
+      session = nextSession || null;
       if (!session) { showGate('strategy-login'); return; }
       $('#strategy-user-email').textContent = session.user.email || '';
       $('#strategy-avatar').textContent = (session.user.email || 'H').slice(0, 1).toUpperCase();
@@ -233,11 +233,48 @@
       $('#strategy-app').hidden = false;
       renderFamilyOptions();
       await requestEstimator();
+  }
+
+  async function verifySession() {
+    showGate('strategy-gate');
+    if (sessionCheckStarted) return;
+    sessionCheckStarted = true;
+    let finished = false;
+    const timer = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      $('#strategy-error-copy').textContent = 'Pemeriksaan sesi terlalu lama. Muat ulang halaman atau masuk kembali ke portal VIP.';
+      showGate('strategy-error');
+    }, 12000);
+    try {
+      const { data, error } = await sb.auth.getSession();
+      if (finished) return;
+      if (error) throw error;
+      const activeSession = data?.session || null;
+      finished = true;
+      clearTimeout(timer);
+      await acceptSession(activeSession);
     } catch {
-      $('#strategy-error-copy').textContent = 'Sesi tidak dapat diverifikasi. Masuk kembali ke portal VIP, lalu buka ulang halaman ini.';
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      $('#strategy-error-copy').textContent = 'Sesi tidak dapat diverifikasi. Muat ulang halaman atau masuk kembali ke portal VIP.';
       showGate('strategy-error');
     }
   }
+
+  sb.auth.onAuthStateChange((event, nextSession) => {
+    if (event === 'INITIAL_SESSION') return;
+    if (event === 'SIGNED_OUT') { session = null; showGate('strategy-login'); return; }
+    if (nextSession && ['SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event)) {
+      session = nextSession;
+      if (!$('#strategy-app').hidden) return;
+      void acceptSession(nextSession).catch(() => {
+        $('#strategy-error-copy').textContent = 'Sesi tidak dapat diverifikasi. Muat ulang halaman atau masuk kembali ke portal VIP.';
+        showGate('strategy-error');
+      });
+    }
+  });
 
   $('#strategy-profile').addEventListener('change', event => applyProfile(event.target.value));
   $('#strategy-families').addEventListener('change', () => { updateProfileFromCombo(); requestEstimator(); });
