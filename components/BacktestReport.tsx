@@ -6,7 +6,7 @@ export function BacktestReport({locale}:{locale:Locale}) {
   const t=(id:string,en:string)=>choose(locale,id,en);
   const {report,points}=data;
   const details:Record<string,string>|undefined=data.details;
-  const testerLog=data.tester_log;
+  const testerLog=(data as typeof data & {tester_log?:{real_ticks_missing_minutes:number;minute_bars_with_missing_tick_detail:number;real_ticks_missing_days:number}}).tester_log;
   const diagnostics=(data as typeof data & {diagnostics?:Record<string,{src:string;width:number;height:number;crop?:{x:number;y:number;width:number;height:number}}>}).diagnostics;
   const charts=[
     {key:"summary",title:t("Ringkasan lengkap backtest","Full backtest summary"),description:t("Statistik asli MT5 Strategy Tester: kualitas data, profit, risiko, dan hasil transaksi.","Original MT5 Strategy Tester statistics: data quality, profit, risk and trade outcomes.")},

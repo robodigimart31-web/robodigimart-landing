@@ -6,1235 +6,1305 @@
     "account_type": "backtest",
     "broker_label": "Exness Technologies Ltd",
     "currency": "USD",
-    "symbol": "XAUUSDc",
-    "initial_balance": 5000,
-    "net_profit": 30452.01,
-    "win_rate": 69.71,
-    "profit_factor": 2.25,
-    "max_drawdown_pct": 4.86,
-    "total_trades": 8449,
+    "symbol": "XAUUSDm",
+    "initial_balance": 1500,
+    "net_profit": 32389.22,
+    "win_rate": 69.11,
+    "profit_factor": 2.21,
+    "max_drawdown_pct": 8.21,
+    "total_trades": 9206,
     "period_start": "2026-01-01T00:00:00Z",
-    "period_end": "2026-10-17T00:00:00Z",
-    "updated_at": "2026-10-17T18:09:03.829Z"
+    "period_end": "2026-11-07T00:00:00Z",
+    "updated_at": "2026-11-07T15:45:41.736Z"
   },
   "chart_basis": "balance",
   "timeframe": "M1",
   "history_quality": "100% real ticks",
   "details": {
-    "Bars": "281210",
-    "Ticks": "77418965",
+    "Bars": "301877",
+    "Ticks": "81054462",
     "Symbols": "1",
-    "Gross Profit": "54 761.52",
-    "Gross Loss": "-24 309.51",
+    "Gross Profit": "59 110.75",
+    "Gross Loss": "-26 721.53",
     "Balance Drawdown Absolute": "0.00",
-    "Balance Drawdown Maximal": "461.38 (1.30%)",
-    "Balance Drawdown Relative": "3.31% (355.40)",
+    "Balance Drawdown Maximal": "441.44 (1.32%)",
+    "Balance Drawdown Relative": "5.05% (211.74)",
     "Equity Drawdown Absolute": "0.00",
-    "Equity Drawdown Maximal": "612.97 (1.72%)",
-    "Equity Drawdown Relative": "4.86% (522.31)",
-    "Expected Payoff": "3.60",
-    "Margin Level": "1707.00%",
-    "Recovery Factor": "49.68",
-    "Sharpe Ratio": "22.46",
-    "Z-Score": "-57.10 (99.74%)",
-    "AHPR": "1.0002 (0.02%)",
-    "GHPR": "1.0002 (0.02%)",
-    "LR Correlation": "0.99",
-    "OnTester result": "2.252678889866558",
-    "LR Standard Error": "955.05",
-    "Total Deals": "16898",
-    "Short Trades (won %)": "4739 (70.20%)",
-    "Long Trades (won %)": "3710 (69.08%)",
-    "Profit Trades (% of total)": "5890 (69.71%)",
-    "Loss Trades (% of total)": "2559 (30.29%)",
-    "Largest profit trade": "68.59",
-    "Largest loss trade": "-33.16",
-    "Average profit trade": "9.30",
-    "Average loss trade": "-9.50",
-    "Maximum consecutive wins ($)": "80 (777.42)",
-    "Maximum consecutive losses ($)": "28 (-288.51)",
-    "Maximal consecutive profit (count)": "777.42 (80)",
-    "Maximal consecutive loss (count)": "-288.51 (28)",
-    "Average consecutive wins": "9",
+    "Equity Drawdown Maximal": "610.99 (1.82%)",
+    "Equity Drawdown Relative": "8.21% (197.37)",
+    "Expected Payoff": "3.52",
+    "Margin Level": "737.01%",
+    "Recovery Factor": "53.01",
+    "Sharpe Ratio": "18.66",
+    "Z-Score": "-58.91 (99.74%)",
+    "AHPR": "1.0003 (0.03%)",
+    "GHPR": "1.0003 (0.03%)",
+    "LR Correlation": "1.00",
+    "OnTester result": "2.212102001644356",
+    "LR Standard Error": "999.36",
+    "Total Deals": "18412",
+    "Short Trades (won %)": "5042 (70.05%)",
+    "Long Trades (won %)": "4164 (67.96%)",
+    "Profit Trades (% of total)": "6362 (69.11%)",
+    "Loss Trades (% of total)": "2844 (30.89%)",
+    "Largest profit trade": "68.62",
+    "Largest loss trade": "-25.97",
+    "Average profit trade": "9.29",
+    "Average loss trade": "-9.40",
+    "Maximum consecutive wins ($)": "80 (776.89)",
+    "Maximum consecutive losses ($)": "33 (-330.31)",
+    "Maximal consecutive profit (count)": "776.89 (80)",
+    "Maximal consecutive loss (count)": "-330.31 (33)",
+    "Average consecutive wins": "8",
     "Average consecutive losses": "4",
     "Leverage": "1:500",
-    "Expert": "HELIX_QUADRIGA_v1.9b_Live"
+    "Expert": "HELIX_QUADRIGA_v1.9c_Live"
   },
   "points": [
     {
       "recorded_at": "2026-01-01T00:00:00Z",
-      "balance": 5000,
+      "balance": 1500,
       "equity": null
     },
     {
       "recorded_at": "2026-01-01T23:59:59Z",
-      "balance": 5039.28,
+      "balance": 1539.29,
       "equity": null
     },
     {
       "recorded_at": "2026-01-02T23:59:59Z",
-      "balance": 5159.08,
+      "balance": 1659.14,
       "equity": null
     },
     {
       "recorded_at": "2026-01-04T23:59:59Z",
-      "balance": 5138.61,
+      "balance": 1638.67,
       "equity": null
     },
     {
       "recorded_at": "2026-01-05T23:59:59Z",
-      "balance": 5208.27,
+      "balance": 1708.32,
       "equity": null
     },
     {
       "recorded_at": "2026-01-06T23:59:59Z",
-      "balance": 5233.84,
+      "balance": 1733.9,
       "equity": null
     },
     {
       "recorded_at": "2026-01-07T23:59:59Z",
-      "balance": 5390.47,
+      "balance": 1880.61,
       "equity": null
     },
     {
       "recorded_at": "2026-01-08T23:59:59Z",
-      "balance": 5426.42,
+      "balance": 1907.05,
       "equity": null
     },
     {
       "recorded_at": "2026-01-09T23:59:59Z",
-      "balance": 5686.24,
+      "balance": 2177.13,
       "equity": null
     },
     {
       "recorded_at": "2026-01-11T23:59:59Z",
-      "balance": 5747.33,
+      "balance": 2238.31,
       "equity": null
     },
     {
       "recorded_at": "2026-01-12T23:59:59Z",
-      "balance": 5772.07,
+      "balance": 2263.07,
       "equity": null
     },
     {
       "recorded_at": "2026-01-13T23:59:59Z",
-      "balance": 5800.66,
+      "balance": 2291.66,
       "equity": null
     },
     {
       "recorded_at": "2026-01-14T23:59:59Z",
-      "balance": 5835.26,
+      "balance": 2326.2,
       "equity": null
     },
     {
       "recorded_at": "2026-01-15T23:59:59Z",
-      "balance": 5882.75,
+      "balance": 2363.56,
       "equity": null
     },
     {
       "recorded_at": "2026-01-16T23:59:59Z",
-      "balance": 6056.12,
+      "balance": 2527.19,
       "equity": null
     },
     {
       "recorded_at": "2026-01-18T23:59:59Z",
-      "balance": 6192.81,
+      "balance": 2663.95,
       "equity": null
     },
     {
       "recorded_at": "2026-01-19T23:59:59Z",
-      "balance": 6934.08,
+      "balance": 3404.54,
       "equity": null
     },
     {
       "recorded_at": "2026-01-20T23:59:59Z",
-      "balance": 7121.89,
+      "balance": 3602.42,
       "equity": null
     },
     {
       "recorded_at": "2026-01-21T23:59:59Z",
-      "balance": 7409.58,
+      "balance": 3889.89,
       "equity": null
     },
     {
       "recorded_at": "2026-01-22T23:59:59Z",
-      "balance": 7476.87,
+      "balance": 3977.32,
       "equity": null
     },
     {
       "recorded_at": "2026-01-23T23:59:59Z",
-      "balance": 7612.21,
+      "balance": 4112.51,
       "equity": null
     },
     {
       "recorded_at": "2026-01-26T23:59:59Z",
-      "balance": 7607.22,
+      "balance": 4107.52,
       "equity": null
     },
     {
       "recorded_at": "2026-01-27T23:59:59Z",
-      "balance": 7690.5,
+      "balance": 4190.7,
       "equity": null
     },
     {
       "recorded_at": "2026-01-30T23:59:59Z",
-      "balance": 7707.45,
+      "balance": 4207.57,
       "equity": null
     },
     {
       "recorded_at": "2026-02-02T23:59:59Z",
-      "balance": 7650.99,
+      "balance": 4151.93,
       "equity": null
     },
     {
       "recorded_at": "2026-02-03T23:59:59Z",
-      "balance": 7636.02,
+      "balance": 4146.11,
       "equity": null
     },
     {
       "recorded_at": "2026-02-04T23:59:59Z",
-      "balance": 7605.03,
+      "balance": 4114.72,
       "equity": null
     },
     {
       "recorded_at": "2026-02-05T23:59:59Z",
-      "balance": 7608.42,
+      "balance": 4117.77,
       "equity": null
     },
     {
       "recorded_at": "2026-02-06T23:59:59Z",
-      "balance": 7616.53,
+      "balance": 4125.47,
       "equity": null
     },
     {
       "recorded_at": "2026-02-08T23:59:59Z",
-      "balance": 7606.5,
+      "balance": 4115.33,
       "equity": null
     },
     {
       "recorded_at": "2026-02-09T23:59:59Z",
-      "balance": 7564.06,
+      "balance": 4073.25,
       "equity": null
     },
     {
       "recorded_at": "2026-02-10T23:59:59Z",
-      "balance": 7802.13,
+      "balance": 4334.03,
       "equity": null
     },
     {
       "recorded_at": "2026-02-11T23:59:59Z",
-      "balance": 8402.18,
+      "balance": 4927.2,
       "equity": null
     },
     {
       "recorded_at": "2026-02-12T23:59:59Z",
-      "balance": 8519.9,
+      "balance": 5053.2,
       "equity": null
     },
     {
       "recorded_at": "2026-02-13T23:59:59Z",
-      "balance": 8857.2,
+      "balance": 5386.88,
       "equity": null
     },
     {
       "recorded_at": "2026-02-15T23:59:59Z",
-      "balance": 8877.22,
+      "balance": 5407.17,
       "equity": null
     },
     {
       "recorded_at": "2026-02-16T23:59:59Z",
-      "balance": 9115.58,
+      "balance": 5574.38,
       "equity": null
     },
     {
       "recorded_at": "2026-02-17T23:59:59Z",
-      "balance": 9377.9,
+      "balance": 5867,
       "equity": null
     },
     {
       "recorded_at": "2026-02-18T23:59:59Z",
-      "balance": 9442.13,
+      "balance": 5931.54,
       "equity": null
     },
     {
       "recorded_at": "2026-02-19T23:59:59Z",
-      "balance": 10073.33,
+      "balance": 6281.39,
       "equity": null
     },
     {
       "recorded_at": "2026-02-20T23:59:59Z",
-      "balance": 10140.44,
+      "balance": 6451.96,
       "equity": null
     },
     {
       "recorded_at": "2026-02-23T23:59:59Z",
-      "balance": 10181.2,
+      "balance": 6513.55,
       "equity": null
     },
     {
       "recorded_at": "2026-02-24T23:59:59Z",
-      "balance": 10289.81,
+      "balance": 6646.26,
       "equity": null
     },
     {
       "recorded_at": "2026-02-25T23:59:59Z",
-      "balance": 10318.07,
+      "balance": 6777.27,
       "equity": null
     },
     {
       "recorded_at": "2026-02-26T23:59:59Z",
-      "balance": 10655.99,
+      "balance": 7106.19,
       "equity": null
     },
     {
       "recorded_at": "2026-02-27T23:59:59Z",
-      "balance": 10980.55,
+      "balance": 7708.24,
       "equity": null
     },
     {
       "recorded_at": "2026-03-01T23:59:59Z",
-      "balance": 11000.31,
+      "balance": 7737.32,
       "equity": null
     },
     {
       "recorded_at": "2026-03-02T23:59:59Z",
-      "balance": 10892.55,
+      "balance": 7644.96,
       "equity": null
     },
     {
       "recorded_at": "2026-03-03T23:59:59Z",
-      "balance": 11125.46,
+      "balance": 7908.43,
       "equity": null
     },
     {
       "recorded_at": "2026-03-04T23:59:59Z",
-      "balance": 11101.39,
+      "balance": 7923.5,
       "equity": null
     },
     {
       "recorded_at": "2026-03-05T23:59:59Z",
-      "balance": 11259.97,
+      "balance": 8178.73,
       "equity": null
     },
     {
       "recorded_at": "2026-03-06T23:59:59Z",
-      "balance": 11459.72,
+      "balance": 8369.89,
       "equity": null
     },
     {
       "recorded_at": "2026-03-08T23:59:59Z",
-      "balance": 11416.66,
+      "balance": 8326.56,
       "equity": null
     },
     {
       "recorded_at": "2026-03-09T23:59:59Z",
-      "balance": 11398.47,
+      "balance": 8288.9,
       "equity": null
     },
     {
       "recorded_at": "2026-03-10T23:59:59Z",
-      "balance": 11423.32,
+      "balance": 8313.68,
       "equity": null
     },
     {
       "recorded_at": "2026-03-11T23:59:59Z",
-      "balance": 11671.19,
+      "balance": 8927.48,
       "equity": null
     },
     {
       "recorded_at": "2026-03-12T23:59:59Z",
-      "balance": 11556.12,
+      "balance": 8928.57,
       "equity": null
     },
     {
       "recorded_at": "2026-03-13T23:59:59Z",
-      "balance": 11581.51,
+      "balance": 8995.52,
       "equity": null
     },
     {
       "recorded_at": "2026-03-15T23:59:59Z",
-      "balance": 11611.57,
+      "balance": 9025.55,
       "equity": null
     },
     {
       "recorded_at": "2026-03-16T23:59:59Z",
-      "balance": 11680.6,
+      "balance": 9093.61,
       "equity": null
     },
     {
       "recorded_at": "2026-03-17T23:59:59Z",
-      "balance": 11847.05,
+      "balance": 9259.15,
       "equity": null
     },
     {
       "recorded_at": "2026-03-18T23:59:59Z",
-      "balance": 11965.84,
+      "balance": 9409.2,
       "equity": null
     },
     {
       "recorded_at": "2026-03-19T23:59:59Z",
-      "balance": 11963.42,
+      "balance": 9417.57,
       "equity": null
     },
     {
       "recorded_at": "2026-03-20T23:59:59Z",
-      "balance": 11991.93,
+      "balance": 9465.37,
       "equity": null
     },
     {
       "recorded_at": "2026-03-22T23:59:59Z",
-      "balance": 11981.93,
+      "balance": 9455.33,
       "equity": null
     },
     {
       "recorded_at": "2026-03-23T23:59:59Z",
-      "balance": 11961.42,
+      "balance": 9458.31,
       "equity": null
     },
     {
       "recorded_at": "2026-03-24T23:59:59Z",
-      "balance": 12218.26,
+      "balance": 9728.06,
       "equity": null
     },
     {
       "recorded_at": "2026-03-25T23:59:59Z",
-      "balance": 12337.5,
+      "balance": 9832.46,
       "equity": null
     },
     {
       "recorded_at": "2026-03-26T23:59:59Z",
-      "balance": 12593.41,
+      "balance": 10077.83,
       "equity": null
     },
     {
       "recorded_at": "2026-03-27T23:59:59Z",
-      "balance": 12634.6,
+      "balance": 10108.96,
       "equity": null
     },
     {
       "recorded_at": "2026-03-30T23:59:59Z",
-      "balance": 12899.47,
+      "balance": 10384.36,
       "equity": null
     },
     {
       "recorded_at": "2026-03-31T23:59:59Z",
-      "balance": 12931.92,
+      "balance": 10420.6,
       "equity": null
     },
     {
       "recorded_at": "2026-04-01T23:59:59Z",
-      "balance": 12982.32,
+      "balance": 10470.37,
       "equity": null
     },
     {
       "recorded_at": "2026-04-02T23:59:59Z",
-      "balance": 13070.95,
+      "balance": 10558.19,
       "equity": null
     },
     {
       "recorded_at": "2026-04-05T23:59:59Z",
-      "balance": 13123.75,
+      "balance": 10606.84,
       "equity": null
     },
     {
       "recorded_at": "2026-04-06T23:59:59Z",
-      "balance": 13327.03,
+      "balance": 10808.06,
       "equity": null
     },
     {
       "recorded_at": "2026-04-07T23:59:59Z",
-      "balance": 13660.22,
+      "balance": 11127.31,
       "equity": null
     },
     {
       "recorded_at": "2026-04-08T23:59:59Z",
-      "balance": 13970.73,
+      "balance": 11253.45,
       "equity": null
     },
     {
       "recorded_at": "2026-04-09T23:59:59Z",
-      "balance": 14351.15,
+      "balance": 11524.95,
       "equity": null
     },
     {
       "recorded_at": "2026-04-10T23:59:59Z",
-      "balance": 14471.3,
+      "balance": 11702.92,
       "equity": null
     },
     {
       "recorded_at": "2026-04-13T23:59:59Z",
-      "balance": 14790.06,
+      "balance": 12018.78,
       "equity": null
     },
     {
       "recorded_at": "2026-04-14T23:59:59Z",
-      "balance": 14790.06,
+      "balance": 11890.76,
       "equity": null
     },
     {
       "recorded_at": "2026-04-15T23:59:59Z",
-      "balance": 14958.92,
+      "balance": 11979.84,
       "equity": null
     },
     {
       "recorded_at": "2026-04-16T23:59:59Z",
-      "balance": 15188.09,
+      "balance": 12141.33,
       "equity": null
     },
     {
       "recorded_at": "2026-04-17T23:59:59Z",
-      "balance": 15318.17,
+      "balance": 12350.52,
       "equity": null
     },
     {
       "recorded_at": "2026-04-20T23:59:59Z",
-      "balance": 16049.09,
+      "balance": 13288.54,
       "equity": null
     },
     {
       "recorded_at": "2026-04-21T23:59:59Z",
-      "balance": 16139.9,
+      "balance": 13379.07,
       "equity": null
     },
     {
       "recorded_at": "2026-04-22T23:59:59Z",
-      "balance": 16461.93,
+      "balance": 13746.79,
       "equity": null
     },
     {
       "recorded_at": "2026-04-23T23:59:59Z",
-      "balance": 16722.35,
+      "balance": 14034.1,
       "equity": null
     },
     {
       "recorded_at": "2026-04-24T23:59:59Z",
-      "balance": 17063.48,
+      "balance": 14488.9,
       "equity": null
     },
     {
       "recorded_at": "2026-04-26T23:59:59Z",
-      "balance": 17092.53,
+      "balance": 14527.58,
       "equity": null
     },
     {
       "recorded_at": "2026-04-27T23:59:59Z",
-      "balance": 17516.06,
+      "balance": 14983.58,
       "equity": null
     },
     {
       "recorded_at": "2026-04-28T23:59:59Z",
-      "balance": 17526.17,
+      "balance": 14993.63,
       "equity": null
     },
     {
       "recorded_at": "2026-04-29T23:59:59Z",
-      "balance": 17512.96,
+      "balance": 15001.46,
       "equity": null
     },
     {
       "recorded_at": "2026-04-30T23:59:59Z",
-      "balance": 17589.01,
+      "balance": 15076.34,
       "equity": null
     },
     {
       "recorded_at": "2026-05-01T23:59:59Z",
-      "balance": 17565.78,
+      "balance": 15052.83,
       "equity": null
     },
     {
       "recorded_at": "2026-05-03T23:59:59Z",
-      "balance": 17552.99,
+      "balance": 15039.53,
       "equity": null
     },
     {
       "recorded_at": "2026-05-04T23:59:59Z",
-      "balance": 18041.33,
+      "balance": 15612.7,
       "equity": null
     },
     {
       "recorded_at": "2026-05-05T23:59:59Z",
-      "balance": 18142.41,
+      "balance": 15724.7,
       "equity": null
     },
     {
       "recorded_at": "2026-05-06T23:59:59Z",
-      "balance": 18316.54,
+      "balance": 15898.69,
       "equity": null
     },
     {
       "recorded_at": "2026-05-07T23:59:59Z",
-      "balance": 18746.05,
+      "balance": 16168.56,
       "equity": null
     },
     {
       "recorded_at": "2026-05-08T23:59:59Z",
-      "balance": 18837.98,
+      "balance": 16270.91,
       "equity": null
     },
     {
       "recorded_at": "2026-05-11T23:59:59Z",
-      "balance": 19077.56,
+      "balance": 16457.88,
       "equity": null
     },
     {
       "recorded_at": "2026-05-12T23:59:59Z",
-      "balance": 19174.14,
+      "balance": 16578.44,
       "equity": null
     },
     {
       "recorded_at": "2026-05-13T23:59:59Z",
-      "balance": 19503.3,
+      "balance": 16966.62,
       "equity": null
     },
     {
       "recorded_at": "2026-05-14T23:59:59Z",
-      "balance": 20054.58,
+      "balance": 17475.18,
       "equity": null
     },
     {
       "recorded_at": "2026-05-15T23:59:59Z",
-      "balance": 19998.37,
+      "balance": 17419.45,
       "equity": null
     },
     {
       "recorded_at": "2026-05-18T23:59:59Z",
-      "balance": 20066.06,
+      "balance": 17467.28,
       "equity": null
     },
     {
       "recorded_at": "2026-05-19T23:59:59Z",
-      "balance": 20097.51,
+      "balance": 17504.37,
       "equity": null
     },
     {
       "recorded_at": "2026-05-20T23:59:59Z",
-      "balance": 20136.04,
+      "balance": 17542.51,
       "equity": null
     },
     {
       "recorded_at": "2026-05-21T23:59:59Z",
-      "balance": 20510.53,
+      "balance": 17843.33,
       "equity": null
     },
     {
       "recorded_at": "2026-05-22T23:59:59Z",
-      "balance": 20782.96,
+      "balance": 18175.65,
       "equity": null
     },
     {
       "recorded_at": "2026-05-24T23:59:59Z",
-      "balance": 21548.28,
+      "balance": 18941.32,
       "equity": null
     },
     {
       "recorded_at": "2026-05-25T23:59:59Z",
-      "balance": 21537.77,
+      "balance": 18910.06,
       "equity": null
     },
     {
       "recorded_at": "2026-05-26T23:59:59Z",
-      "balance": 21611.93,
+      "balance": 18949.26,
       "equity": null
     },
     {
       "recorded_at": "2026-05-27T23:59:59Z",
-      "balance": 21712.42,
+      "balance": 19070.05,
       "equity": null
     },
     {
       "recorded_at": "2026-05-28T23:59:59Z",
-      "balance": 21782.04,
+      "balance": 19139.54,
       "equity": null
     },
     {
       "recorded_at": "2026-05-29T23:59:59Z",
-      "balance": 22250.21,
+      "balance": 19624.62,
       "equity": null
     },
     {
       "recorded_at": "2026-06-01T23:59:59Z",
-      "balance": 22360.73,
+      "balance": 19745.72,
       "equity": null
     },
     {
       "recorded_at": "2026-06-02T23:59:59Z",
-      "balance": 22624.87,
+      "balance": 20063.1,
       "equity": null
     },
     {
       "recorded_at": "2026-06-03T23:59:59Z",
-      "balance": 22845.71,
+      "balance": 20293.37,
       "equity": null
     },
     {
       "recorded_at": "2026-06-04T23:59:59Z",
-      "balance": 22995.35,
+      "balance": 20393.69,
       "equity": null
     },
     {
       "recorded_at": "2026-06-05T23:59:59Z",
-      "balance": 23029.63,
+      "balance": 20428.08,
       "equity": null
     },
     {
       "recorded_at": "2026-06-08T23:59:59Z",
-      "balance": 23067.74,
+      "balance": 20475.93,
       "equity": null
     },
     {
       "recorded_at": "2026-06-09T23:59:59Z",
-      "balance": 23101.49,
+      "balance": 20519.9,
       "equity": null
     },
     {
       "recorded_at": "2026-06-10T23:59:59Z",
-      "balance": 23106.1,
+      "balance": 20524.51,
       "equity": null
     },
     {
       "recorded_at": "2026-06-11T23:59:59Z",
-      "balance": 23149.09,
+      "balance": 20567.54,
       "equity": null
     },
     {
       "recorded_at": "2026-06-12T23:59:59Z",
-      "balance": 23381.61,
+      "balance": 20802.03,
       "equity": null
     },
     {
       "recorded_at": "2026-06-15T23:59:59Z",
-      "balance": 23450.75,
+      "balance": 20871.14,
       "equity": null
     },
     {
       "recorded_at": "2026-06-16T23:59:59Z",
-      "balance": 23499.09,
+      "balance": 20919.54,
       "equity": null
     },
     {
       "recorded_at": "2026-06-17T23:59:59Z",
-      "balance": 23730.47,
+      "balance": 21131.87,
       "equity": null
     },
     {
       "recorded_at": "2026-06-18T23:59:59Z",
-      "balance": 23486.33,
+      "balance": 20897.96,
       "equity": null
     },
     {
       "recorded_at": "2026-06-19T23:59:59Z",
-      "balance": 23729.54,
+      "balance": 21121.79,
       "equity": null
     },
     {
       "recorded_at": "2026-06-21T23:59:59Z",
-      "balance": 23709,
+      "balance": 21101.25,
       "equity": null
     },
     {
       "recorded_at": "2026-06-22T23:59:59Z",
-      "balance": 23640.67,
+      "balance": 21032.47,
       "equity": null
     },
     {
       "recorded_at": "2026-06-23T23:59:59Z",
-      "balance": 23895.76,
+      "balance": 21256.94,
       "equity": null
     },
     {
       "recorded_at": "2026-06-24T23:59:59Z",
-      "balance": 23914.43,
+      "balance": 21235.45,
       "equity": null
     },
     {
       "recorded_at": "2026-06-25T23:59:59Z",
-      "balance": 24152.71,
+      "balance": 21473.42,
       "equity": null
     },
     {
       "recorded_at": "2026-06-26T23:59:59Z",
-      "balance": 24211.7,
+      "balance": 21532.5,
       "equity": null
     },
     {
       "recorded_at": "2026-06-28T23:59:59Z",
-      "balance": 24288.29,
+      "balance": 21609.07,
       "equity": null
     },
     {
       "recorded_at": "2026-06-29T23:59:59Z",
-      "balance": 24396.85,
+      "balance": 21713.06,
       "equity": null
     },
     {
       "recorded_at": "2026-06-30T23:59:59Z",
-      "balance": 24971.03,
+      "balance": 22287.06,
       "equity": null
     },
     {
       "recorded_at": "2026-07-01T23:59:59Z",
-      "balance": 25366.07,
+      "balance": 22681.99,
       "equity": null
     },
     {
       "recorded_at": "2026-07-02T23:59:59Z",
-      "balance": 25485.15,
+      "balance": 22801.31,
       "equity": null
     },
     {
       "recorded_at": "2026-07-03T23:59:59Z",
-      "balance": 25446.99,
+      "balance": 22763.07,
       "equity": null
     },
     {
       "recorded_at": "2026-07-05T23:59:59Z",
-      "balance": 25444.72,
+      "balance": 22761.29,
       "equity": null
     },
     {
       "recorded_at": "2026-07-06T23:59:59Z",
-      "balance": 25512.98,
+      "balance": 22829.6,
       "equity": null
     },
     {
       "recorded_at": "2026-07-07T23:59:59Z",
-      "balance": 25562.29,
+      "balance": 22878.79,
       "equity": null
     },
     {
       "recorded_at": "2026-07-08T23:59:59Z",
-      "balance": 25964.22,
+      "balance": 23281.14,
       "equity": null
     },
     {
       "recorded_at": "2026-07-09T23:59:59Z",
-      "balance": 25916.26,
+      "balance": 23233.35,
       "equity": null
     },
     {
       "recorded_at": "2026-07-10T23:59:59Z",
-      "balance": 26000.25,
+      "balance": 23317.5,
       "equity": null
     },
     {
       "recorded_at": "2026-07-12T23:59:59Z",
-      "balance": 26000.25,
+      "balance": 23317.5,
       "equity": null
     },
     {
       "recorded_at": "2026-07-13T23:59:59Z",
-      "balance": 26080.83,
+      "balance": 23398.11,
       "equity": null
     },
     {
       "recorded_at": "2026-07-14T23:59:59Z",
-      "balance": 26570.94,
+      "balance": 23900.78,
       "equity": null
     },
     {
       "recorded_at": "2026-07-15T23:59:59Z",
-      "balance": 26603.91,
+      "balance": 23954.71,
       "equity": null
     },
     {
       "recorded_at": "2026-07-16T23:59:59Z",
-      "balance": 26751.13,
+      "balance": 24081.79,
       "equity": null
     },
     {
       "recorded_at": "2026-07-17T23:59:59Z",
-      "balance": 27117.17,
+      "balance": 24457.98,
       "equity": null
     },
     {
       "recorded_at": "2026-07-20T23:59:59Z",
-      "balance": 27212.83,
+      "balance": 24553.76,
       "equity": null
     },
     {
       "recorded_at": "2026-07-21T23:59:59Z",
-      "balance": 27530.74,
+      "balance": 24880.74,
       "equity": null
     },
     {
       "recorded_at": "2026-07-22T23:59:59Z",
-      "balance": 27663.11,
+      "balance": 25012.88,
       "equity": null
     },
     {
       "recorded_at": "2026-07-23T23:59:59Z",
-      "balance": 27588.17,
+      "balance": 24938.22,
       "equity": null
     },
     {
       "recorded_at": "2026-07-24T23:59:59Z",
-      "balance": 27591.47,
+      "balance": 24970.91,
       "equity": null
     },
     {
       "recorded_at": "2026-07-26T23:59:59Z",
-      "balance": 27664.75,
+      "balance": 25044.25,
       "equity": null
     },
     {
       "recorded_at": "2026-07-27T23:59:59Z",
-      "balance": 27792.59,
+      "balance": 25201.27,
       "equity": null
     },
     {
       "recorded_at": "2026-07-28T23:59:59Z",
-      "balance": 27934.61,
+      "balance": 25342.98,
       "equity": null
     },
     {
       "recorded_at": "2026-07-29T23:59:59Z",
-      "balance": 27919.41,
+      "balance": 25327.79,
       "equity": null
     },
     {
       "recorded_at": "2026-07-30T23:59:59Z",
-      "balance": 28013.6,
+      "balance": 25431.96,
       "equity": null
     },
     {
       "recorded_at": "2026-07-31T23:59:59Z",
-      "balance": 28300.87,
+      "balance": 25718.96,
       "equity": null
     },
     {
       "recorded_at": "2026-08-03T23:59:59Z",
-      "balance": 28389.25,
+      "balance": 25807.58,
       "equity": null
     },
     {
       "recorded_at": "2026-08-04T23:59:59Z",
-      "balance": 28481.16,
+      "balance": 25894.73,
       "equity": null
     },
     {
       "recorded_at": "2026-08-05T23:59:59Z",
-      "balance": 28594.96,
+      "balance": 26008.3,
       "equity": null
     },
     {
       "recorded_at": "2026-08-06T23:59:59Z",
-      "balance": 28752.22,
+      "balance": 26155.1,
       "equity": null
     },
     {
       "recorded_at": "2026-08-07T23:59:59Z",
-      "balance": 29340.15,
+      "balance": 26733.07,
       "equity": null
     },
     {
       "recorded_at": "2026-08-09T23:59:59Z",
-      "balance": 29677.91,
+      "balance": 27071.16,
       "equity": null
     },
     {
       "recorded_at": "2026-08-10T23:59:59Z",
-      "balance": 30039.49,
+      "balance": 27434.48,
       "equity": null
     },
     {
       "recorded_at": "2026-08-11T23:59:59Z",
-      "balance": 30145.24,
+      "balance": 27511.58,
       "equity": null
     },
     {
       "recorded_at": "2026-08-12T23:59:59Z",
-      "balance": 30225.75,
+      "balance": 27592.52,
       "equity": null
     },
     {
       "recorded_at": "2026-08-13T23:59:59Z",
-      "balance": 30325.95,
+      "balance": 27694.43,
       "equity": null
     },
     {
       "recorded_at": "2026-08-14T23:59:59Z",
-      "balance": 30303.44,
+      "balance": 27671.96,
       "equity": null
     },
     {
       "recorded_at": "2026-08-16T23:59:59Z",
-      "balance": 30312.46,
+      "balance": 27681.01,
       "equity": null
     },
     {
       "recorded_at": "2026-08-17T23:59:59Z",
-      "balance": 30236.99,
+      "balance": 27606,
       "equity": null
     },
     {
       "recorded_at": "2026-08-18T23:59:59Z",
-      "balance": 30428.35,
+      "balance": 27809.5,
       "equity": null
     },
     {
       "recorded_at": "2026-08-19T23:59:59Z",
-      "balance": 30452.39,
+      "balance": 27833.55,
       "equity": null
     },
     {
       "recorded_at": "2026-08-20T23:59:59Z",
-      "balance": 30694.96,
+      "balance": 28075.95,
       "equity": null
     },
     {
       "recorded_at": "2026-08-21T23:59:59Z",
-      "balance": 30808.69,
+      "balance": 28169.71,
       "equity": null
     },
     {
       "recorded_at": "2026-08-23T23:59:59Z",
-      "balance": 30828.5,
+      "balance": 28189.52,
       "equity": null
     },
     {
       "recorded_at": "2026-08-24T23:59:59Z",
-      "balance": 30858.68,
+      "balance": 28219.57,
       "equity": null
     },
     {
       "recorded_at": "2026-08-25T23:59:59Z",
-      "balance": 31038.36,
+      "balance": 28399.15,
       "equity": null
     },
     {
       "recorded_at": "2026-08-26T23:59:59Z",
-      "balance": 31113.65,
+      "balance": 28474.59,
       "equity": null
     },
     {
       "recorded_at": "2026-08-27T23:59:59Z",
-      "balance": 31390.65,
+      "balance": 28751.21,
       "equity": null
     },
     {
       "recorded_at": "2026-08-28T23:59:59Z",
-      "balance": 31356.9,
+      "balance": 28717.4,
       "equity": null
     },
     {
       "recorded_at": "2026-08-31T23:59:59Z",
-      "balance": 31547.54,
+      "balance": 28949.82,
       "equity": null
     },
     {
       "recorded_at": "2026-09-01T23:59:59Z",
-      "balance": 31623.53,
+      "balance": 29025.75,
       "equity": null
     },
     {
       "recorded_at": "2026-09-02T23:59:59Z",
-      "balance": 31673.25,
+      "balance": 29055.05,
       "equity": null
     },
     {
       "recorded_at": "2026-09-03T23:59:59Z",
-      "balance": 31650.92,
+      "balance": 29074.68,
       "equity": null
     },
     {
       "recorded_at": "2026-09-04T23:59:59Z",
-      "balance": 31642.43,
+      "balance": 29182.32,
       "equity": null
     },
     {
       "recorded_at": "2026-09-06T23:59:59Z",
-      "balance": 31649.47,
+      "balance": 29189.48,
       "equity": null
     },
     {
       "recorded_at": "2026-09-07T23:59:59Z",
-      "balance": 31735.09,
+      "balance": 29275.61,
       "equity": null
     },
     {
       "recorded_at": "2026-09-08T23:59:59Z",
-      "balance": 32030.52,
+      "balance": 29571.01,
       "equity": null
     },
     {
       "recorded_at": "2026-09-09T23:59:59Z",
-      "balance": 31898.34,
+      "balance": 29459.3,
       "equity": null
     },
     {
       "recorded_at": "2026-09-10T23:59:59Z",
-      "balance": 32191.45,
+      "balance": 29762.29,
       "equity": null
     },
     {
       "recorded_at": "2026-09-11T23:59:59Z",
-      "balance": 32465.48,
+      "balance": 30036.63,
       "equity": null
     },
     {
       "recorded_at": "2026-09-13T23:59:59Z",
-      "balance": 32504.56,
+      "balance": 30085.88,
       "equity": null
     },
     {
       "recorded_at": "2026-09-14T23:59:59Z",
-      "balance": 32778.05,
+      "balance": 30394.47,
       "equity": null
     },
     {
       "recorded_at": "2026-09-15T23:59:59Z",
-      "balance": 33248.53,
+      "balance": 30864.9,
       "equity": null
     },
     {
       "recorded_at": "2026-09-16T23:59:59Z",
-      "balance": 33167.07,
+      "balance": 30648.08,
       "equity": null
     },
     {
       "recorded_at": "2026-09-17T23:59:59Z",
-      "balance": 33270.05,
+      "balance": 31156.31,
       "equity": null
     },
     {
       "recorded_at": "2026-09-18T23:59:59Z",
-      "balance": 34158.68,
+      "balance": 32085.52,
       "equity": null
     },
     {
       "recorded_at": "2026-09-20T23:59:59Z",
-      "balance": 34207.88,
+      "balance": 32134.59,
       "equity": null
     },
     {
       "recorded_at": "2026-09-21T23:59:59Z",
-      "balance": 35109.28,
+      "balance": 33065.77,
       "equity": null
     },
     {
       "recorded_at": "2026-09-22T23:59:59Z",
-      "balance": 34953.92,
+      "balance": 32932.93,
       "equity": null
     },
     {
       "recorded_at": "2026-09-23T23:59:59Z",
-      "balance": 35503.44,
+      "balance": 33472.81,
       "equity": null
     },
     {
       "recorded_at": "2026-09-24T23:59:59Z",
-      "balance": 35497.49,
+      "balance": 33437.48,
       "equity": null
     },
     {
       "recorded_at": "2026-09-25T23:59:59Z",
-      "balance": 35420.16,
+      "balance": 33359.35,
       "equity": null
     },
     {
       "recorded_at": "2026-09-27T23:59:59Z",
-      "balance": 35467.7,
+      "balance": 33406.9,
       "equity": null
     },
     {
       "recorded_at": "2026-09-28T23:59:59Z",
-      "balance": 35531.94,
+      "balance": 33475.77,
       "equity": null
     },
     {
       "recorded_at": "2026-09-29T23:59:59Z",
-      "balance": 35541.77,
+      "balance": 33485.6,
       "equity": null
     },
     {
       "recorded_at": "2026-09-30T23:59:59Z",
-      "balance": 35557.5,
+      "balance": 33501.51,
       "equity": null
     },
     {
       "recorded_at": "2026-10-01T23:59:59Z",
-      "balance": 35311.35,
+      "balance": 33237.08,
       "equity": null
     },
     {
       "recorded_at": "2026-10-02T23:59:59Z",
-      "balance": 35153.55,
+      "balance": 33163.64,
       "equity": null
     },
     {
       "recorded_at": "2026-10-05T23:59:59Z",
-      "balance": 35247.2,
+      "balance": 33233.84,
       "equity": null
     },
     {
       "recorded_at": "2026-10-06T23:59:59Z",
-      "balance": 35109.48,
+      "balance": 33096.23,
       "equity": null
     },
     {
       "recorded_at": "2026-10-07T23:59:59Z",
-      "balance": 35362.28,
+      "balance": 33369.74,
       "equity": null
     },
     {
       "recorded_at": "2026-10-08T23:59:59Z",
-      "balance": 35513.84,
+      "balance": 33458.55,
       "equity": null
     },
     {
       "recorded_at": "2026-10-09T23:59:59Z",
-      "balance": 35508.74,
+      "balance": 33453.65,
       "equity": null
     },
     {
       "recorded_at": "2026-10-12T23:59:59Z",
-      "balance": 35548.44,
+      "balance": 33473.32,
       "equity": null
     },
     {
       "recorded_at": "2026-10-13T23:59:59Z",
-      "balance": 35485.6,
+      "balance": 33410.04,
       "equity": null
     },
     {
       "recorded_at": "2026-10-14T23:59:59Z",
-      "balance": 35392.42,
+      "balance": 33286.46,
       "equity": null
     },
     {
       "recorded_at": "2026-10-15T23:59:59Z",
-      "balance": 35405.9,
+      "balance": 33281.26,
       "equity": null
     },
     {
       "recorded_at": "2026-10-16T23:59:59Z",
-      "balance": 35452.01,
+      "balance": 33343.34,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-19T23:59:59Z",
+      "balance": 33335.32,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-20T23:59:59Z",
+      "balance": 33447.57,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-21T23:59:59Z",
+      "balance": 33461.08,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-22T23:59:59Z",
+      "balance": 33455.66,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-23T23:59:59Z",
+      "balance": 33459.91,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-25T23:59:59Z",
+      "balance": 33434.22,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-26T23:59:59Z",
+      "balance": 33433.16,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-27T23:59:59Z",
+      "balance": 33489.34,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-28T23:59:59Z",
+      "balance": 33420.63,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-29T23:59:59Z",
+      "balance": 33481.37,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-10-30T23:59:59Z",
+      "balance": 33501.02,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-11-02T23:59:59Z",
+      "balance": 33609.81,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-11-03T23:59:59Z",
+      "balance": 33369.43,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-11-04T23:59:59Z",
+      "balance": 33398.37,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-11-05T23:59:59Z",
+      "balance": 33757.27,
+      "equity": null
+    },
+    {
+      "recorded_at": "2026-11-06T23:59:59Z",
+      "balance": 33889.22,
       "equity": null
     }
   ],
-  "tester_log": {
-    "expert_file": "HELIX_QUADRIGA_v1.9b_Live.ex5",
-    "final_balance": 35452.01,
-    "currency": "USD",
-    "ticks": 77418965,
-    "bars": 281210,
-    "real_ticks_missing_minutes": 1258,
-    "minute_bars_with_missing_tick_detail": 281210,
-    "real_ticks_missing_days": 1
-  },
   "diagnostics": {
     "distribution": {
-      "src": "/images/backtest/quadriga-hst-9e7cc4257273.png",
+      "src": "/images/backtest/quadriga-hst-94f7b986c324.png",
       "width": 860,
       "height": 400
     },
     "correlation": {
-      "src": "/images/backtest/quadriga-mfemae-8fa93e41d7aa.png",
+      "src": "/images/backtest/quadriga-mfemae-a3894bd7408a.png",
       "width": 860,
       "height": 400
     },
     "holding": {
-      "src": "/images/backtest/quadriga-holding-cb9ba873aea5.png",
+      "src": "/images/backtest/quadriga-holding-c4d69babd909.png",
       "width": 860,
       "height": 200
     }
